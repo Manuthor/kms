@@ -11,7 +11,7 @@ use cloudproof_findex::{
 };
 use cosmian_kmip::{kmip_0::kmip_types::State, kmip_2_1::KmipOperation};
 use cosmian_kms_crypto::reexport::cosmian_crypto_core::{Secret, SymmetricKey, kdf256};
-use cosmian_kms_interfaces::{InterfaceResult, PermissionsStore, SessionParams};
+use cosmian_kms_interfaces::{InterfaceResult, PermissionsStore};
 use redis_for_migrations::aio::ConnectionManager;
 
 use super::permissions::PermissionsDB;
@@ -81,7 +81,6 @@ impl PermissionsStore for RedisWithFindex {
     async fn list_user_operations_granted(
         &self,
         _user: &str,
-        _params: Option<Arc<dyn SessionParams>>,
     ) -> InterfaceResult<HashMap<String, (String, State, HashSet<KmipOperation>)>> {
         unreachable!("Not needed - keep unimplemented for now");
     }
@@ -91,7 +90,6 @@ impl PermissionsStore for RedisWithFindex {
     async fn list_object_operations_granted(
         &self,
         uid: &str,
-        _params: Option<Arc<dyn SessionParams>>,
     ) -> InterfaceResult<HashMap<String, HashSet<KmipOperation>>> {
         Ok(self
             .permissions_db
@@ -107,7 +105,6 @@ impl PermissionsStore for RedisWithFindex {
         uid: &str,
         user: &str,
         operations: HashSet<KmipOperation>,
-        _params: Option<Arc<dyn SessionParams>>,
     ) -> InterfaceResult<()> {
         for operation in &operations {
             self.permissions_db
@@ -125,7 +122,6 @@ impl PermissionsStore for RedisWithFindex {
         uid: &str,
         user: &str,
         operations: HashSet<KmipOperation>,
-        _params: Option<Arc<dyn SessionParams>>,
     ) -> InterfaceResult<()> {
         for operation in &operations {
             self.permissions_db
@@ -141,7 +137,6 @@ impl PermissionsStore for RedisWithFindex {
         uid: &str,
         user: &str,
         no_inherited_access: bool,
-        _params: Option<Arc<dyn SessionParams>>,
     ) -> InterfaceResult<HashSet<KmipOperation>> {
         Ok(self
             .permissions_db

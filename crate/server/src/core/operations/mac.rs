@@ -1,15 +1,12 @@
-use std::sync::Arc;
+// SessionParams removed; MAC operations are now paramless
 
-use cosmian_kms_server_database::reexport::{
-    cosmian_kmip::{
-        kmip_0::kmip_types::HashingAlgorithm,
-        kmip_2_1::{
-            KmipOperation,
-            kmip_operations::{MAC, MACResponse, MACVerify, MACVerifyResponse},
-            kmip_types::{CryptographicAlgorithm, UniqueIdentifier, ValidityIndicator},
-        },
+use cosmian_kms_server_database::reexport::cosmian_kmip::{
+    kmip_0::kmip_types::HashingAlgorithm,
+    kmip_2_1::{
+        KmipOperation,
+        kmip_operations::{MAC, MACResponse, MACVerify, MACVerifyResponse},
+        kmip_types::{CryptographicAlgorithm, UniqueIdentifier, ValidityIndicator},
     },
-    cosmian_kms_interfaces::SessionParams,
 };
 use cosmian_logger::{debug, trace};
 use openssl::{md::Md, md_ctx::MdCtx, pkey::PKey};
@@ -43,12 +40,7 @@ fn compute_hmac(key: &[u8], data: &[u8], algorithm: HashingAlgorithm) -> KResult
     Ok(hmac)
 }
 
-pub(crate) async fn mac(
-    kms: &KMS,
-    request: MAC,
-    user: &str,
-    params: Option<Arc<dyn SessionParams>>,
-) -> KResult<MACResponse> {
+pub(crate) async fn mac(kms: &KMS, request: MAC, user: &str) -> KResult<MACResponse> {
     trace!("Mac: {}", serde_json::to_string(&request)?);
 
     let uid = request
@@ -73,7 +65,6 @@ pub(crate) async fn mac(
             KmipOperation::Get,
             kms,
             user,
-            params.clone(),
         ))
         .await?;
         let key_block = owm.object().key_block()?;
@@ -88,7 +79,6 @@ pub(crate) async fn mac(
                 CryptographicAlgorithm::HMACSHA3256 => HashingAlgorithm::SHA3256,
                 CryptographicAlgorithm::HMACSHA3384 => HashingAlgorithm::SHA3384,
                 CryptographicAlgorithm::HMACSHA3512 => HashingAlgorithm::SHA3512,
-                // Non-HMAC algorithms (e.g., AES) cannot directly infer hashing algorithm; try attributes
                 _ => {
                     let attrs = owm.attributes();
                     if let Some(cp) = &attrs.cryptographic_parameters {
@@ -168,7 +158,6 @@ pub(crate) async fn mac(
             KmipOperation::Get,
             kms,
             user,
-            params,
         ))
         .await?;
         let key_bytes = owm.object().key_block()?.key_bytes().context("mac")?;
@@ -188,7 +177,6 @@ pub(super) async fn mac_verify(
     kms: &KMS,
     request: MACVerify,
     user: &str,
-    params: Option<Arc<dyn SessionParams>>,
 ) -> KResult<MACVerifyResponse> {
     trace!("MacVerify: {}", serde_json::to_string(&request)?);
     let UniqueIdentifier::TextString(uid) = &request.unique_identifier else {
@@ -202,7 +190,6 @@ pub(super) async fn mac_verify(
         KmipOperation::Get,
         kms,
         user,
-        params,
     ))
     .await?;
     let key_block = owm.object().key_block()?;
@@ -383,7 +370,6 @@ mod tests {
                 )?,
                 "user",
                 None,
-                None,
             )
             .await?
             .unique_identifier,
@@ -400,7 +386,7 @@ mod tests {
             init_indicator: None,
             final_indicator: None,
         };
-        let response = kms.mac(request, "user", None).await?;
+        let response = kms.mac(request, "user").await?;
         assert_eq!(response.mac_data.unwrap().len(), 32);
         assert_eq!(response.correlation_value, None);
 
@@ -416,7 +402,7 @@ mod tests {
             init_indicator: Some(true),
             final_indicator: None,
         };
-        let response = kms.mac(request, "user", None).await?;
+        let response = kms.mac(request, "user").await?;
         assert_eq!(response.mac_data, None);
         assert_eq!(response.correlation_value.clone().unwrap().len(), 32);
 
@@ -432,7 +418,7 @@ mod tests {
             init_indicator: None,
             final_indicator: Some(true),
         };
-        let response = kms.mac(request, "user", None).await?;
+        let response = kms.mac(request, "user").await?;
         assert_eq!(response.mac_data.unwrap().len(), 32);
         assert_eq!(response.correlation_value, None);
         Ok(())

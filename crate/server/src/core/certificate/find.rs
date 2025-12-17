@@ -1,11 +1,11 @@
-use std::sync::Arc;
+// SessionParams removed from certificate helpers
 
 use cosmian_kms_server_database::reexport::{
     cosmian_kmip::kmip_2_1::{
         KmipOperation,
         kmip_types::{LinkType, LinkedObjectIdentifier},
     },
-    cosmian_kms_interfaces::{ObjectWithMetadata, SessionParams},
+    cosmian_kms_interfaces::ObjectWithMetadata,
 };
 use cosmian_logger::trace;
 
@@ -28,7 +28,6 @@ pub(crate) async fn retrieve_issuer_private_key_and_certificate(
     certificate_id: Option<String>,
     kms: &KMS,
     user: &str,
-    params: Option<Arc<dyn SessionParams>>,
 ) -> KResult<(ObjectWithMetadata, ObjectWithMetadata)> {
     trace!(
         "Retrieving issuer private key and certificate: private_key_id: {:?}, certificate_id: {:?}",
@@ -41,7 +40,6 @@ pub(crate) async fn retrieve_issuer_private_key_and_certificate(
             KmipOperation::Certify,
             kms,
             user,
-            params.clone(),
         ))
         .await?;
         let private_key = Box::pin(retrieve_object_for_operation(
@@ -49,7 +47,6 @@ pub(crate) async fn retrieve_issuer_private_key_and_certificate(
             KmipOperation::Certify,
             kms,
             user,
-            params,
         ))
         .await?;
         return Ok((private_key, certificate));
@@ -61,7 +58,6 @@ pub(crate) async fn retrieve_issuer_private_key_and_certificate(
             KmipOperation::Certify,
             kms,
             user,
-            params.clone(),
         ))
         .await?;
         let certificate = Box::pin(retrieve_certificate_for_private_key(
@@ -69,7 +65,6 @@ pub(crate) async fn retrieve_issuer_private_key_and_certificate(
             KmipOperation::Certify,
             kms,
             user,
-            params,
         ))
         .await?;
         return Ok((private_key, certificate));
@@ -82,7 +77,6 @@ pub(crate) async fn retrieve_issuer_private_key_and_certificate(
             KmipOperation::Certify,
             kms,
             user,
-            params.clone(),
         ))
         .await?;
         let private_key = Box::pin(retrieve_private_key_for_certificate(
@@ -90,7 +84,6 @@ pub(crate) async fn retrieve_issuer_private_key_and_certificate(
             KmipOperation::Certify,
             kms,
             user,
-            params,
         ))
         .await?;
         return Ok((private_key, certificate));
@@ -108,7 +101,6 @@ pub(crate) async fn retrieve_certificate_for_private_key(
     operation_type: KmipOperation,
     kms: &KMS,
     user: &str,
-    params: Option<Arc<dyn SessionParams>>,
 ) -> Result<ObjectWithMetadata, KmsError> {
     trace!(
         "Retrieving certificate for private key: {}",
@@ -141,7 +133,6 @@ pub(crate) async fn retrieve_certificate_for_private_key(
             operation_type,
             kms,
             user,
-            params.clone(),
         ))
         .await?
     };
@@ -152,7 +143,6 @@ pub(crate) async fn retrieve_certificate_for_private_key(
         operation_type,
         kms,
         user,
-        params,
     ))
     .await
     .with_context(|| {
@@ -172,7 +162,6 @@ pub(crate) async fn retrieve_private_key_for_certificate(
     operation_type: KmipOperation,
     kms: &KMS,
     user: &str,
-    params: Option<Arc<dyn SessionParams>>,
 ) -> Result<ObjectWithMetadata, KmsError> {
     trace!(
         "Retrieving private key for certificate: certificate_uid_or_tags: {:?}",
@@ -183,7 +172,6 @@ pub(crate) async fn retrieve_private_key_for_certificate(
         KmipOperation::GetAttributes,
         kms,
         user,
-        params.clone(),
     ))
     .await?;
 
@@ -207,7 +195,6 @@ pub(crate) async fn retrieve_private_key_for_certificate(
             operation_type,
             kms,
             user,
-            params.clone(),
         ))
         .await?
     };
@@ -217,7 +204,6 @@ pub(crate) async fn retrieve_private_key_for_certificate(
         operation_type,
         kms,
         user,
-        params,
     ))
     .await
     .with_context(|| {
@@ -231,7 +217,6 @@ async fn find_link_in_public_key(
     operation_type: KmipOperation,
     kms: &KMS,
     user: &str,
-    params: Option<Arc<dyn SessionParams>>,
 ) -> Result<LinkedObjectIdentifier, KmsError> {
     // TODO: retrieve only the attributes when #88 is fixed
     let public_key_owm = Box::pin(retrieve_object_for_operation(
@@ -239,7 +224,6 @@ async fn find_link_in_public_key(
         operation_type,
         kms,
         user,
-        params,
     ))
     .await?;
     let public_key_attributes = public_key_owm.attributes();

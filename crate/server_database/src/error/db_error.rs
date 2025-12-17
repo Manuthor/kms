@@ -98,7 +98,7 @@ pub enum DbError {
 
     // SQL database errors (PostgreSQL, MySQL, SQLite)
     #[error("Sql error: {0}")]
-    SqlError(#[from] sqlx::Error),
+    SqlError(String),
 
     // When a the UnwrappedCache (LRU cache) returns an error
     #[error("Unwrapped cache error: {0}")]
@@ -177,6 +177,66 @@ impl From<String> for ConversionDbError {
 impl From<std::io::Error> for DbError {
     fn from(e: std::io::Error) -> Self {
         Self::ServerError(e.to_string())
+    }
+}
+
+// SQL driver error conversions (sqlx-free)
+impl From<rusqlite::Error> for DbError {
+    fn from(e: rusqlite::Error) -> Self {
+        let msg = e.to_string();
+        // Some SQLite API misuses surface as "Query is not read-only"; in our context, this
+        // most commonly happens on duplicate imports. Map to a clearer, user-facing message.
+        if msg.contains("Query is not read-only") {
+            Self::DatabaseError("one or more objects already exist".to_owned())
+        } else {
+            Self::SqlError(msg)
+        }
+    }
+}
+
+impl<E: std::error::Error + Send + Sync + 'static> From<tokio_rusqlite::Error<E>> for DbError {
+    fn from(e: tokio_rusqlite::Error<E>) -> Self {
+        // The error type is generic across tokio-rusqlite versions; rely on string content.
+        let msg = e.to_string();
+        if msg.contains("Query is not read-only") {
+            Self::DatabaseError("one or more objects already exist".to_owned())
+        } else {
+            Self::SqlError(msg)
+        }
+    }
+}
+
+impl From<tokio_postgres::Error> for DbError {
+    fn from(e: tokio_postgres::Error) -> Self {
+        // Normalize common constraint violations to user-friendly messages
+        if let Some(db_err) = e.as_db_error() {
+            use tokio_postgres::error::SqlState;
+            if *db_err.code() == SqlState::UNIQUE_VIOLATION {
+                return Self::DatabaseError("one or more objects already exist".to_owned());
+            }
+        }
+        Self::SqlError(e.to_string())
+    }
+}
+
+impl From<deadpool_postgres::PoolError> for DbError {
+    fn from(e: deadpool_postgres::PoolError) -> Self {
+        Self::SqlError(e.to_string())
+    }
+}
+
+impl From<mysql_async::Error> for DbError {
+    fn from(e: mysql_async::Error) -> Self {
+        match e {
+            mysql_async::Error::Server(ref se) => {
+                // 1062 ER_DUP_ENTRY: Duplicate entry for key (unique/primary key violation)
+                if se.code == 1062 {
+                    return Self::DatabaseError("one or more objects already exist".to_owned());
+                }
+                Self::SqlError(se.to_string())
+            }
+            other => Self::SqlError(other.to_string()),
+        }
     }
 }
 

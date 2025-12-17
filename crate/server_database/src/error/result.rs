@@ -3,6 +3,7 @@ use crate::error::DbError;
 pub(crate) type DbResult<R> = Result<R, DbError>;
 
 /// A helper trait for `DbResult` that provides additional methods for error handling.
+#[allow(dead_code)]
 pub(crate) trait DbResultHelper<T> {
     /// Sets the context for the error.
     ///

@@ -1,4 +1,4 @@
-use std::{collections::HashSet, sync::Arc};
+use std::collections::HashSet;
 
 #[cfg(feature = "non-fips")]
 use cosmian_kms_server_database::reexport::cosmian_kmip::kmip_0::kmip_types::State;
@@ -18,7 +18,7 @@ use cosmian_kms_server_database::{
             },
         },
         cosmian_kms_crypto::crypto::symmetric::symmetric_ciphers::AES_256_GCM_KEY_LENGTH,
-        cosmian_kms_interfaces::{EncryptionOracle, SessionParams},
+        cosmian_kms_interfaces::EncryptionOracle,
     },
 };
 use cosmian_logger::{debug, trace};
@@ -40,16 +40,9 @@ impl KMS {
     /// * `uid` - The unique identifier of the object
     /// * `object` - The object to unwrap
     /// * `user` - The user requesting the unwrapped object
-    /// * `params` - Extra parameters for the store
     /// # Errors
     /// If the object is not a key object
-    pub async fn get_unwrapped(
-        &self,
-        uid: &str,
-        object: &Object,
-        user: &str,
-        params: Option<Arc<dyn SessionParams>>,
-    ) -> KResult<Object> {
+    pub async fn get_unwrapped(&self, uid: &str, object: &Object, user: &str) -> KResult<Object> {
         // Is this an unwrapped key?
         if !object.is_wrapped() {
             // already an unwrapped key
@@ -80,7 +73,7 @@ impl KMS {
         let unwrap_local = async {
             let fingerprint = object.fingerprint()?;
             let mut unwrapped_object = object.clone();
-            unwrap_object(&mut unwrapped_object, self, user, params).await?;
+            unwrap_object(&mut unwrapped_object, self, user).await?;
             Ok::<_, KmsError>(CachedUnwrappedObject::new(fingerprint, unwrapped_object))
         };
 
@@ -200,7 +193,6 @@ impl KMS {
         &self,
         create_request: &Create,
         _owner: &str,
-        _params: Option<Arc<dyn SessionParams>>,
         _privileged_users: Option<Vec<String>>,
     ) -> KResult<(Option<String>, Object, HashSet<String>)> {
         trace!("Internal create private key (FIPS build)");
@@ -314,7 +306,6 @@ impl KMS {
         &self,
         create_request: &Create,
         owner: &str,
-        params: Option<Arc<dyn SessionParams>>,
         privileged_users: Option<Vec<String>>,
     ) -> KResult<(Option<String>, Object, HashSet<String>)> {
         trace!("Internal create private key");
@@ -334,7 +325,6 @@ impl KMS {
                     Covercrypt::default(),
                     create_request,
                     owner,
-                    params,
                     create_request.attributes.sensitive.unwrap_or(false),
                     privileged_users,
                 )

@@ -1,4 +1,4 @@
-use std::sync::Arc;
+// SessionParams removed; unwrap helpers are now paramless
 
 use cosmian_kms_server_database::reexport::{
     cosmian_kmip::{
@@ -11,7 +11,6 @@ use cosmian_kms_server_database::reexport::{
         },
     },
     cosmian_kms_crypto::crypto::wrap::{decode_unwrapped_key, unwrap_key_block},
-    cosmian_kms_interfaces::SessionParams,
 };
 use cosmian_logger::debug;
 
@@ -33,12 +32,7 @@ use crate::{
 ///
 /// # Returns
 /// * `KResult<()>` - the result of the operation
-pub(crate) async fn unwrap_object(
-    object: &mut Object,
-    kms: &KMS,
-    user: &str,
-    params: Option<Arc<dyn SessionParams>>,
-) -> KResult<()> {
+pub(crate) async fn unwrap_object(object: &mut Object, kms: &KMS, user: &str) -> KResult<()> {
     if !object.is_wrapped() {
         debug!("object is not wrapped, no need to unwrap");
         return Ok(());
@@ -76,7 +70,7 @@ pub(crate) async fn unwrap_object(
             "...unwrapping the key block with key uid: {unwrapping_key_uid} using the KMS, user: \
              {user}"
         );
-        unwrap_using_kms(object_key_block, kms, user, params, &unwrapping_key_uid).await?;
+        unwrap_using_kms(object_key_block, kms, user, &unwrapping_key_uid).await?;
     }
     debug!(
         "Key successfully unwrapped with wrapping key: {}",
@@ -90,13 +84,12 @@ async fn unwrap_using_kms(
     object_key_block: &mut KeyBlock,
     kms: &KMS,
     user: &str,
-    params: Option<Arc<dyn SessionParams>>,
     unwrapping_key_uid: &String,
 ) -> KResult<()> {
     // fetch the wrapping key
     let unwrapping_key = kms
         .database
-        .retrieve_object(unwrapping_key_uid, params.clone())
+        .retrieve_object(unwrapping_key_uid)
         .await
         .context("wrap using KMS")?;
     let unwrapping_key = unwrapping_key.ok_or_else(|| {
@@ -127,7 +120,7 @@ async fn unwrap_using_kms(
             };
             let unwrapping_key = kms
                 .database
-                .retrieve_object(&sk_id, params.clone())
+                .retrieve_object(&sk_id)
                 .await
                 .context("wrap using KMS")?;
             unwrapping_key.ok_or_else(|| {
@@ -160,7 +153,7 @@ async fn unwrap_using_kms(
     if unwrapping_key.owner() != user && user != kms.params.default_username {
         let ops = kms
             .database
-            .list_user_operations_on_object(unwrapping_key.id(), user, false, params)
+            .list_user_operations_on_object(unwrapping_key.id(), user, false)
             .await?;
         if !ops
             .iter()

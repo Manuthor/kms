@@ -115,7 +115,7 @@ impl RedisMigrate for RedisWithFindex {
         for obj_uid in all_object_uids.clone() {
             // List permission using the old version.
             let per_user = legacy_findex_redis_store
-                .list_object_operations_granted(&obj_uid, None)
+                .list_object_operations_granted(&obj_uid)
                 .await?;
 
             let obj_uid = ObjectUid(obj_uid);
@@ -135,14 +135,14 @@ impl RedisMigrate for RedisWithFindex {
             // In this step, we will re-perform this indexing using the new findex instance pointing to DB 1.
             // We do not need to read back the previously indexed keywords, instead we will re-generate them from the object
             // metadata the same way as it was done previously done (see the `keywords` method in objects_db.rs, around line 100).
-            let object_with_metadata = self.retrieve(&obj_uid, None).await?.ok_or_else(|| {
+            let object_with_metadata = self.retrieve(&obj_uid).await?.ok_or_else(|| {
                 DbError::Default(format!(
                     "Failed to retrieve object {obj_uid} during migration"
                 ))
             })?;
             let object = object_with_metadata.object();
 
-            let tags = self.retrieve_tags(&obj_uid, None).await?;
+            let tags = self.retrieve_tags(&obj_uid).await?;
             let mut keywords_to_be_indexed = tags
                 .into_iter()
                 .map(|tag| Keyword::from(tag.as_bytes()))

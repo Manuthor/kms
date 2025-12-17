@@ -46,7 +46,7 @@ pub(crate) async fn test_validate_with_certificates_bytes() -> Result<(), KmsErr
         unique_identifier: None,
         validity_time: None,
     };
-    let res = kms.validate(request, owner, None).await?;
+    let res = kms.validate(request, owner).await?;
     assert_eq!(res.validity_indicator, ValidityIndicator::Valid);
     debug!("OK: Validate root certificate");
     let request = Validate {
@@ -54,7 +54,7 @@ pub(crate) async fn test_validate_with_certificates_bytes() -> Result<(), KmsErr
         unique_identifier: None,
         validity_time: None,
     };
-    let res = kms.validate(request, owner, None).await?;
+    let res = kms.validate(request, owner).await?;
     assert_eq!(res.validity_indicator, ValidityIndicator::Valid);
     debug!("OK: Validate root/intermediate certificates");
     let request = Validate {
@@ -69,7 +69,7 @@ pub(crate) async fn test_validate_with_certificates_bytes() -> Result<(), KmsErr
         unique_identifier: None,
         validity_time: None,
     };
-    let res = kms.validate(request, owner, None).await;
+    let res = kms.validate(request, owner).await;
     res.unwrap_err();
     debug!("OK: Validate root/intermediate/leaf1 certificates - invalid (revoked)");
     let request = Validate {
@@ -84,7 +84,7 @@ pub(crate) async fn test_validate_with_certificates_bytes() -> Result<(), KmsErr
         unique_identifier: None,
         validity_time: None,
     };
-    let res = kms.validate(request, owner, None).await?;
+    let res = kms.validate(request, owner).await?;
     assert_eq!(res.validity_indicator, ValidityIndicator::Valid);
     debug!("OK: Validate root/intermediate/leaf certificates - valid");
     let request = Validate {
@@ -100,7 +100,7 @@ pub(crate) async fn test_validate_with_certificates_bytes() -> Result<(), KmsErr
         validity_time: //Some(Asn1Time::days_from_now(3651).unwrap().to_owned()), // this is supposed to work but it does not.
         Some("4804152030Z".to_owned())
     };
-    let res = kms.validate(request, owner, None).await;
+    let res = kms.validate(request, owner).await;
     res.unwrap_err();
     debug!("OK: Validate root/intermediate/leaf2 certificates - invalid");
     let request = Validate {
@@ -108,7 +108,7 @@ pub(crate) async fn test_validate_with_certificates_bytes() -> Result<(), KmsErr
         unique_identifier: None,
         validity_time: None,
     };
-    let res = kms.validate(request, owner, None).await;
+    let res = kms.validate(request, owner).await;
     res.unwrap_err();
     debug!("OK: Validate root/leaf2 certificates - missing intermediate");
 
@@ -156,7 +156,7 @@ pub(crate) async fn test_validate_with_certificates_ids() -> Result<(), KmsError
             certificate_value: root_cert.clone(),
         }),
     };
-    let res_root = kms.import(root_request, owner, None, None).await?;
+    let res_root = kms.import(root_request, owner, None).await?;
     // intermediate
     let intermediate_request = Import {
         unique_identifier: UniqueIdentifier::TextString(String::new()),
@@ -172,7 +172,7 @@ pub(crate) async fn test_validate_with_certificates_ids() -> Result<(), KmsError
             certificate_value: intermediate_cert.clone(),
         }),
     };
-    let res_intermediate = kms.import(intermediate_request, owner, None, None).await?;
+    let res_intermediate = kms.import(intermediate_request, owner, None).await?;
     // leaf1
     let leaf1_request = Import {
         unique_identifier: UniqueIdentifier::TextString(String::new()),
@@ -188,14 +188,14 @@ pub(crate) async fn test_validate_with_certificates_ids() -> Result<(), KmsError
             certificate_value: leaf1_cert.clone(),
         }),
     };
-    let res_leaf1 = kms.import(leaf1_request, owner, None, None).await?;
+    let res_leaf1 = kms.import(leaf1_request, owner, None).await?;
     // Only the root, it is valid by default
     let request = Validate {
         certificate: None,
         unique_identifier: Some([res_root.unique_identifier.clone()].to_vec()),
         validity_time: None,
     };
-    let res = kms.validate(request, owner, None).await?;
+    let res = kms.validate(request, owner).await?;
     assert_eq!(res.validity_indicator, ValidityIndicator::Valid);
     debug!("OK: Validate root - valid");
 
@@ -208,7 +208,7 @@ pub(crate) async fn test_validate_with_certificates_ids() -> Result<(), KmsError
         ]),
         validity_time: None,
     };
-    let res = kms.validate(request, owner, None).await?;
+    let res = kms.validate(request, owner).await?;
     assert_eq!(res.validity_indicator, ValidityIndicator::Valid);
     debug!("OK: Validate root/intermediate certificates - valid");
 
@@ -222,7 +222,7 @@ pub(crate) async fn test_validate_with_certificates_ids() -> Result<(), KmsError
         ]),
         validity_time: None,
     };
-    let res = kms.validate(request, owner, None).await;
+    let res = kms.validate(request, owner).await;
     res.unwrap_err();
     debug!("OK: Validate root/intermediate/leaf1 certificates - invalid (revoked)");
 
@@ -232,7 +232,7 @@ pub(crate) async fn test_validate_with_certificates_ids() -> Result<(), KmsError
         unique_identifier: None,
         validity_time: None,
     };
-    let res = Box::pin(kms.validate(request, owner, None)).await;
+    let res = Box::pin(kms.validate(request, owner)).await;
     res.unwrap_err();
 
     // Root and intermediate valid certificates. Leaf valid. Test returns valid.
@@ -244,7 +244,7 @@ pub(crate) async fn test_validate_with_certificates_ids() -> Result<(), KmsError
         ]),
         validity_time: None,
     };
-    let res = Box::pin(kms.validate(request, owner, None)).await?;
+    let res = Box::pin(kms.validate(request, owner)).await?;
     assert_eq!(res.validity_indicator, ValidityIndicator::Valid);
     debug!("OK: Validate root/intermediate/leaf2 certificates - valid");
 
@@ -259,7 +259,7 @@ pub(crate) async fn test_validate_with_certificates_ids() -> Result<(), KmsError
         ]),
         validity_time: None,
     };
-    let res = Box::pin(kms.validate(request, owner, None)).await?;
+    let res = Box::pin(kms.validate(request, owner)).await?;
     assert_eq!(res.validity_indicator, ValidityIndicator::Valid);
     debug!("OK: Validate root/intermediate/leaf2 certificates - valid");
 
@@ -275,7 +275,7 @@ pub(crate) async fn test_validate_with_certificates_ids() -> Result<(), KmsError
         validity_time: //Some(Asn1Time::days_from_now(3651).unwrap().to_owned()), // this is supposed to work but it does not.
         Some("4804152030Z".to_owned())
     };
-    let res = Box::pin(kms.validate(request, owner, None)).await;
+    let res = Box::pin(kms.validate(request, owner)).await;
     res.unwrap_err();
     debug!(
         "OK: Validate root/intermediate/leaf2 certificates - invalid (won't be valid in the \
@@ -288,7 +288,7 @@ pub(crate) async fn test_validate_with_certificates_ids() -> Result<(), KmsError
         unique_identifier: Some(vec![res_root.unique_identifier.clone()]),
         validity_time: None,
     };
-    let res = Box::pin(kms.validate(request, owner, None)).await;
+    let res = Box::pin(kms.validate(request, owner)).await;
     res.unwrap_err();
 
     debug!("OK: Validate root/leaf2 certificates - invalid (missing intermediate)");
@@ -298,7 +298,7 @@ pub(crate) async fn test_validate_with_certificates_ids() -> Result<(), KmsError
         unique_identifier: Some([res_intermediate.unique_identifier.clone()].to_vec()),
         validity_time: None,
     };
-    let res = Box::pin(kms.validate(request, owner, None)).await;
+    let res = Box::pin(kms.validate(request, owner)).await;
     res.unwrap_err();
     debug!("OK: Validate root/leaf2 certificates - invalid (missing root)");
 

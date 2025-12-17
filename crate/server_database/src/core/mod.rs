@@ -65,25 +65,25 @@ impl Database {
         clear_db_on_start: bool,
         cache_max_age: Duration,
     ) -> DbResult<Self> {
-        Ok(match main_db_params {
+        match main_db_params {
             MainDbParams::Sqlite(db_path, max_conns) => {
                 let db = Arc::new(
                     SqlitePool::instantiate(&db_path.join("kms.db"), clear_db_on_start, *max_conns)
                         .await?,
                 );
-                Self::new(db.clone(), db, cache_max_age)
+                Ok(Self::new(db.clone(), db, cache_max_age))
             }
             MainDbParams::Postgres(url, max_conns) => {
                 let db = Arc::new(
                     PgPool::instantiate(url.as_str(), clear_db_on_start, *max_conns).await?,
                 );
-                Self::new(db.clone(), db, cache_max_age)
+                Ok(Self::new(db.clone(), db, cache_max_age))
             }
             MainDbParams::Mysql(url, max_conns) => {
                 let db = Arc::new(
                     MySqlPool::instantiate(url.as_str(), clear_db_on_start, *max_conns).await?,
                 );
-                Self::new(db.clone(), db, cache_max_age)
+                Ok(Self::new(db.clone(), db, cache_max_age))
             }
             #[cfg(feature = "non-fips")]
             MainDbParams::RedisFindex(url, master_key, label) => {
@@ -109,9 +109,9 @@ impl Database {
                     )
                     .await?,
                 );
-                Self::new(db.clone(), db, cache_max_age)
+                Ok(Self::new(db.clone(), db, cache_max_age))
             }
-        })
+        }
     }
 
     pub const fn unwrapped_cache(&self) -> &UnwrappedCache {
