@@ -86,7 +86,7 @@ impl Database {
                 Ok(Self::new(db.clone(), db, cache_max_age))
             }
             #[cfg(feature = "non-fips")]
-            MainDbParams::RedisFindex(url, master_key, label) => {
+            MainDbParams::RedisFindex(url, master_key) => {
                 // There is no reason to keep a copy of the key in the shared config
                 // So we are going to create a "zeroizable" copy which will be passed to Redis with Findex
                 // and zeroize the one in the shared config
@@ -101,13 +101,8 @@ impl Database {
                 // `master_key` implements ZeroizeOnDrop so there is no need
                 // to manually zeroize.
                 let db = Arc::new(
-                    RedisWithFindex::instantiate(
-                        url.as_str(),
-                        new_master_key,
-                        clear_db_on_start,
-                        label.as_deref(),
-                    )
-                    .await?,
+                    RedisWithFindex::instantiate(url.as_str(), new_master_key, clear_db_on_start)
+                        .await?,
                 );
                 Ok(Self::new(db.clone(), db, cache_max_age))
             }

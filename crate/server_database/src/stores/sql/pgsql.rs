@@ -625,7 +625,7 @@ impl PermissionsStore for PgPool {
                     .await
                     .map_err(|e| InterfaceError::Db(e.to_string()))?;
             }
-            return Ok(())
+            return Ok(());
         }
         let json =
             serde_json::to_value(&remaining).map_err(|e| InterfaceError::Db(e.to_string()))?;

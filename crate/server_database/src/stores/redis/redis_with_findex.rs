@@ -5,7 +5,6 @@ use std::{
 };
 
 use async_trait::async_trait;
-use cloudproof_findex::Label;
 use cosmian_findex::{Findex, IndexADT, MemoryEncryptionLayer, generic_decode, generic_encode};
 use cosmian_kmip::{
     kmip_0::kmip_types::State,
@@ -18,7 +17,7 @@ use cosmian_kms_crypto::{
 use cosmian_kms_interfaces::{
     AtomicOperation, InterfaceResult, ObjectWithMetadata, ObjectsStore, PermissionsStore,
 };
-use cosmian_logger::{debug, trace, warn};
+use cosmian_logger::{debug, trace};
 use cosmian_sse_memories::{ADDRESS_LENGTH, Address, RedisMemory};
 use redis::aio::ConnectionManager;
 use uuid::Uuid;
@@ -33,7 +32,7 @@ use crate::{
     error::{DbError, DbResult},
     stores::{
         REDIS_WITH_FINDEX_MASTER_KEY_LENGTH,
-        migrate::{DbState, Migrate, MigrateTo5_12_0Parameters, MigrationParams, RedisMigrate},
+        migrate::{DbState, Migrate},
         redis::{
             findex::{CUSTOM_WORD_LENGTH, FindexRedis, IndexedValue, Keyword},
             objects_db::RedisOperation,
@@ -97,7 +96,6 @@ impl RedisWithFindex {
         redis_url: &str,
         master_key: Secret<REDIS_WITH_FINDEX_MASTER_KEY_LENGTH>,
         clear_database: bool,
-        label: Option<&[u8]>,
     ) -> DbResult<Self> {
         // derive a DB Key
         let mut db_key = SymmetricKey::<DB_KEY_LENGTH>::default();
@@ -143,26 +141,11 @@ impl RedisWithFindex {
                 .await?;
             redis_with_findex.set_db_state(DbState::Ready).await?;
         } else {
-            warn!("Non-empty Redis database detected. Starting migration routine.");
-            let label = label.unwrap_or_else(|| {
-                warn!(
-                    "Label parameter not provided. Ignore this warning if this was \
-                    intentional. Otherwise, abort the migration and provide the correct \
-                    label."
-                );
-                b""
-            });
-            redis_with_findex
-                .migrate({
-                    MigrationParams {
-                        migrate_to_5_12_0_parameters: Some(MigrateTo5_12_0Parameters {
-                            redis_url: redis_url.to_owned(),
-                            master_key: &master_key,
-                            label: Label::from(label),
-                        }),
-                    }
-                })
-                .await?;
+            return Err(DbError::DatabaseError(
+                "Legacy Redis/Findex migration support has been removed. \
+                Please export your data from the legacy KMS and reimport into the current version."
+                    .to_owned(),
+            ));
         }
 
         Ok(redis_with_findex)

@@ -84,7 +84,6 @@ num-bigint-dig = { workspace = true, features = [
     "serde",
     "zeroize",
 ] }
-openidconnect = { version = "4.0", features = ["reqwest", "native-tls"] }
 openssl = { workspace = true }
 opentelemetry = { workspace = true }
 opentelemetry-otlp = { workspace = true }
@@ -112,6 +111,7 @@ utimaco_pkcs11_loader = { path = "../hsm/utimaco", version = "5.14.0" }
 uuid = { workspace = true, features = ["v4"] }
 x509-parser = { workspace = true }
 zeroize = { workspace = true }
+sha2 = { workspace = true }
 
 [dev-dependencies]
 actix-http = "3.10"
