@@ -75,10 +75,13 @@ pkgs228.mkShell {
   ]
   ++ (
     if isLinux then
-      [
-        pkgs228.gcc
-        pkgs228.binutils
-      ]
+      (if withHsm then
+        [ ]
+       else
+        [
+          pkgs228.gcc
+          pkgs228.binutils
+        ])
     else
       [ ]
   )
@@ -177,13 +180,15 @@ pkgs228.mkShell {
       [ -n ${"\${NIX_CC_BIN:-}"} ] && PATH=${"\${NIX_CC_BIN}"}:$PATH
       [ -n ${"\${NIX_BINUTILS_BIN:-}"} ] && PATH=${"\${NIX_BINUTILS_BIN}"}:$PATH
       AR_BIN=${"\${NIX_BINUTILS_UNWRAPPED_BIN:-\${NIX_BINUTILS_BIN:-}}"}
-      export CC=${"\${NIX_CC_BIN:-}"}/cc
-      export AR="$AR_BIN/ar"
-      if [ ! -x "$AR" ] && command -v ar >/dev/null 2>&1; then AR="$(command -v ar)"; fi
-      export CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER="$CC"
-      export CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_AR="$AR"
-      export CC_x86_64_unknown_linux_gnu="$CC"
-      export AR_x86_64_unknown_linux_gnu="$AR"
+      if [ -n ${"\${NIX_CC_BIN:-}"} ]; then
+        export CC=${"\${NIX_CC_BIN}"}/cc
+        export AR="$AR_BIN/ar"
+        if [ ! -x "$AR" ] && command -v ar >/dev/null 2>&1; then AR="$(command -v ar)"; fi
+        export CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER="$CC"
+        export CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_AR="$AR"
+        export CC_x86_64_unknown_linux_gnu="$CC"
+        export AR_x86_64_unknown_linux_gnu="$AR"
+      fi
     fi
     # --- End inlined nix/shell-hook.sh ---
   '';

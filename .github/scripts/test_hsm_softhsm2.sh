@@ -59,6 +59,7 @@ env \
   HSM_MODEL="softhsm2" \
   HSM_USER_PASSWORD="$HSM_USER_PASSWORD" \
   HSM_SLOT_ID="$SOFTHSM2_HSM_SLOT_ID" \
+  RUST_LOG="cosmian_kms_server=trace,cosmian_kms_crypto=trace,test_kms_server=trace,cosmian_kms_cli=trace" \
   cargo test \
   -p cosmian_kms_server \
   ${FEATURES_FLAG[@]+"${FEATURES_FLAG[@]}"} \
