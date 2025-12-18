@@ -158,7 +158,6 @@ fi
 if [ "$COMMAND" = "test" ]; then
   export WITH_WGET=1
 fi
-
 # Determine repository root
 REPO_ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 cd "$REPO_ROOT"
@@ -346,33 +345,8 @@ test)
   # Signal to shell.nix to include extra tools for tests (wget, softhsm2, psmisc)
   if [ "$TEST_TYPE" = "hsm" ] || [ "$TEST_TYPE" = "all" ]; then
     export WITH_HSM=1
-    # Decide whether to use host toolchain or Nix toolchain for HSM tests.
-    # In RUN_PURE_HSM mode, avoid leaking host CC/AR/linker into nix-shell to keep glibc consistent.
-    if [ -n "${RUN_PURE_HSM:-}" ]; then
-      USE_HOST_TOOLCHAIN_FOR_HSM=false
-    else
-      USE_HOST_TOOLCHAIN_FOR_HSM=true
-    fi
-
-    if [ "$USE_HOST_TOOLCHAIN_FOR_HSM" = true ]; then
-      # Prefer host toolchain for non-pure HSM tests to access vendor libs
-      # Preserve these through nix-shell via --keep flags below.
-      if command -v cc >/dev/null 2>&1; then
-        export CC="$(command -v cc)"
-        export CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER="$CC"
-        # Also force via RUSTFLAGS so rustc honors the host linker
-        if [ -n "$CC" ]; then
-          export RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-Clinker=$CC"
-        fi
-      fi
-      if command -v ar >/dev/null 2>&1; then
-        export AR="$(command -v ar)"
-        export CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_AR="$AR"
-      fi
-    else
-      # Ensure we don't propagate any pre-set host toolchain env into a pure shell
-      unset CC CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER AR CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_AR || true
-    fi
+    # Always run HSM tests in pure mode; do not preserve host toolchain env
+    unset CC CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER AR CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_AR || true
   fi
   # For PyKMIP tests, ensure Python tooling is present inside the Nix shell
   if [ "$TEST_TYPE" = "pykmip" ]; then
@@ -392,18 +366,10 @@ test)
         --keep WITH_PYTHON"
 
   # Optionally add toolchain-related keeps if using host toolchain
-  if [ "${USE_HOST_TOOLCHAIN_FOR_HSM:-false}" = true ]; then
-    KEEP_VARS="$KEEP_VARS_BASE \
-          --keep RUSTFLAGS \
-          --keep CC --keep AR \
-          --keep CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER \
-          --keep CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_AR"
-  else
-    KEEP_VARS="$KEEP_VARS_BASE"
-  fi
+  KEEP_VARS="$KEEP_VARS_BASE"
   ;;
 package)
-  # Prefer Nix derivations (nix/package.nix) over shell scripts
+  # Package subcommand handled below; no HSM-specific env setup here
   case "$VARIANT" in
   fips | non-fips) : ;;
   *)
@@ -845,16 +811,10 @@ if [ "$COMMAND" = "package" ] && [ "$PACKAGE_TYPE" = "dmg" ] && [ "$(uname)" = "
   echo "Note: Running without --pure mode on macOS for DMG packaging (requires system utilities)"
 fi
 
-# For HSM tests we need access to system libraries (e.g., vendor PKCS#11, OpenSSL)
-# Allow forcing pure mode via RUN_PURE_HSM=1 when host glibc/tooling should be isolated.
+# For HSM tests, always run in pure mode.
 if [ "$COMMAND" = "test" ] && { [ "$TEST_TYPE" = "hsm" ] || [ "$TEST_TYPE" = "all" ]; }; then
-  if [ -n "${RUN_PURE_HSM:-}" ]; then
-    USE_PURE=true
-    echo "Note: Forcing --pure mode for HSM tests (RUN_PURE_HSM set)"
-  else
-    USE_PURE=false
-    echo "Note: Running without --pure mode for HSM tests to allow system PKCS#11/runtime libraries"
-  fi
+  USE_PURE=true
+  echo "Note: Running HSM tests in --pure mode (backend=${HSM_BACKEND:-all})"
 fi
 
 {

@@ -112,6 +112,10 @@ fn hsm_clap_config(owner: &str, kek_id: Option<Uuid>) -> KResult<ClapConfig> {
     }
     info!("Configured HSM tests for {unwrapped_model}");
 
+    // Persist objects across KMS re-instantiations in HSM flows
+    // so public/private keys remain available between test phases.
+    clap_config.db.clear_database = false;
+
     if let Some(kek_id) = kek_id {
         clap_config.key_encryption_key = Some(as_hsm_uid!(clap_config.hsm.hsm_slot[0], kek_id));
     }
