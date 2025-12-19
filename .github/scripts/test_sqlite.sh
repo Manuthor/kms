@@ -13,6 +13,11 @@ setup_fips_openssl_env
 # Ensure required tools are available when running outside Nix
 require_cmd cargo "Cargo is required to build and run tests. Install Rust (rustup) and retry."
 
+# Clean build artifacts to avoid rustc version mismatches after toolchain updates
+# This prevents errors like E0514 (crate compiled by incompatible rustc) when the
+# pinned toolchain in `rust-toolchain.toml` changes.
+cargo clean || true
+
 echo "========================================="
 echo "Running SQLite tests"
 echo "========================================="

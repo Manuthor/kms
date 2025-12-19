@@ -484,7 +484,7 @@ _run_workspace_tests() {
   esac
 
   # shellcheck disable=SC2086
-  cargo test --workspace --lib --exclude cosmian_kms_cli $RELEASE_FLAG ${FEATURES_FLAG[@]+"${FEATURES_FLAG[@]}"} -- $test_args $test_filter
+  cargo test --workspace --lib $RELEASE_FLAG ${FEATURES_FLAG[@]+"${FEATURES_FLAG[@]}"} -- $test_args $test_filter
   # shellcheck disable=SC2086
   cargo test --workspace --lib $RELEASE_FLAG ${FEATURES_FLAG[@]+"${FEATURES_FLAG[@]}"} --
 }
