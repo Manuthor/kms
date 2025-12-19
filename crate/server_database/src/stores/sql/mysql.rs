@@ -201,7 +201,9 @@ impl ObjectsStore for MySqlPool {
                         tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
                         continue;
                     }
-                    return Err(InterfaceError::Db(format!("creation of object failed: {e}")));
+                    return Err(InterfaceError::Db(format!(
+                        "creation of object failed: {e}"
+                    )));
                 }
             };
             match tx.commit().await {
@@ -282,9 +284,7 @@ impl ObjectsStore for MySqlPool {
                         tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
                         continue;
                     }
-                    return Err(InterfaceError::Db(format!(
-                        "update of object failed: {e}"
-                    )));
+                    return Err(InterfaceError::Db(format!("update of object failed: {e}")));
                 }
             }
         }
@@ -388,9 +388,7 @@ impl ObjectsStore for MySqlPool {
                         tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
                         continue;
                     }
-                    return Err(InterfaceError::Db(format!(
-                        "delete of object failed: {e}"
-                    )));
+                    return Err(InterfaceError::Db(format!("delete of object failed: {e}")));
                 }
             }
         }
