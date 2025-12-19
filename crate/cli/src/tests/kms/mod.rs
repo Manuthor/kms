@@ -1,4 +1,3 @@
-#![cfg(feature = "non-fips")]
 mod access;
 mod attributes;
 #[cfg(feature = "non-fips")]

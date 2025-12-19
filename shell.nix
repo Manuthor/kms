@@ -75,13 +75,15 @@ pkgs228.mkShell {
   ]
   ++ (
     if isLinux then
-      (if withHsm then
-        [ ]
-       else
-        [
-          pkgs228.gcc
-          pkgs228.binutils
-        ])
+      (
+        if withHsm then
+          [ ]
+        else
+          [
+            pkgs228.gcc
+            pkgs228.binutils
+          ]
+      )
     else
       [ ]
   )

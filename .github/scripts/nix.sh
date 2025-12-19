@@ -811,10 +811,15 @@ if [ "$COMMAND" = "package" ] && [ "$PACKAGE_TYPE" = "dmg" ] && [ "$(uname)" = "
   echo "Note: Running without --pure mode on macOS for DMG packaging (requires system utilities)"
 fi
 
-# For HSM tests, always run in pure mode.
+# For HSM tests, default to impure for Utimaco to avoid cargo segfaults; others stay pure.
 if [ "$COMMAND" = "test" ] && { [ "$TEST_TYPE" = "hsm" ] || [ "$TEST_TYPE" = "all" ]; }; then
-  USE_PURE=true
-  echo "Note: Running HSM tests in --pure mode (backend=${HSM_BACKEND:-all})"
+  if [ "${HSM_BACKEND:-all}" = "utimaco" ] && [ -z "${FORCE_PURE_HSM:-}" ]; then
+    USE_PURE=false
+    echo "Note: Running Utimaco HSM tests in non-pure nix-shell (impure)"
+  else
+    USE_PURE=true
+    echo "Note: Running HSM tests in --pure mode (backend=${HSM_BACKEND:-all})"
+  fi
 fi
 
 {

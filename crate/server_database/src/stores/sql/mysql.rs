@@ -325,8 +325,15 @@ impl ObjectsStore for MySqlPool {
                         )));
                     }
 
-                    // Detect MySQL deadlock (1213) via normalized Sql error text
-                    let is_deadlock = matches!(&e, crate::DbError::SqlError(msg) if msg.contains("Deadlock found when trying to get lock"));
+                    // Detect MySQL deadlock (1213) via normalized error text
+                    // The inner operations may wrap SQL errors using `db_bail!`,
+                    // which produces a `DatabaseError` variant. Handle both.
+                    let is_deadlock = match &e {
+                        crate::DbError::SqlError(msg) | crate::DbError::DatabaseError(msg) => {
+                            msg.contains("Deadlock found when trying to get lock")
+                        }
+                        _ => false,
+                    };
                     if is_deadlock && attempt < max_retries {
                         attempt += 1;
                         // Exponential-ish backoff: 20ms, 60ms, 180ms
