@@ -70,6 +70,7 @@ pkgs228.mkShell {
     pkgs228.cmake
     pkgs228.git
     pkgs228.rustup
+    pkgs228.zlib
     # Provide cargo-packager in the shell so packaging scripts can call `cargo packager`
     project.cargoPackagerTool
   ]
@@ -139,6 +140,7 @@ pkgs228.mkShell {
           export NIX_BINUTILS_UNWRAPPED_BIN="${(pkgs228.binutils-unwrapped or pkgs228.binutils)}/bin"
           export NIX_GLIBC_LIB="${pkgs228.glibc}/lib"
           export NIX_DYN_LINKER="${pkgs228.glibc}/lib/ld-linux-x86-64.so.2"
+          export NIX_ZLIB_LIB="${pkgs228.zlib}/lib"
         ''
       else
         ""
@@ -157,6 +159,11 @@ pkgs228.mkShell {
 
       # Add OpenSSL lib directory to LD_LIBRARY_PATH so dynamically linked binaries can find it
       export LD_LIBRARY_PATH=${"\${NIX_OPENSSL_OUT}"}/lib:${"\${LD_LIBRARY_PATH:-}"}
+
+      # Ensure zlib is available to dynamically linked tools (rustc, cc)
+      if [ -n ${"\${NIX_ZLIB_LIB:-}"} ] && [ -d ${"\${NIX_ZLIB_LIB}"} ]; then
+        export LD_LIBRARY_PATH=${"\${NIX_ZLIB_LIB}"}:${"\${LD_LIBRARY_PATH:-}"}
+      fi
 
       # Configure FIPS provider for runtime (needed for tests)
       # Point to the FIPS configuration and provider modules

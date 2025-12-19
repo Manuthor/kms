@@ -171,30 +171,56 @@ impl ObjectsStore for MySqlPool {
         attributes: &Attributes,
         tags: &HashSet<String>,
     ) -> InterfaceResult<String> {
-        let mut conn = self
-            .pool
-            .get_conn()
-            .await
-            .map_err(|e| InterfaceError::Db(format!("Failed to get a connection: {e}")))?;
-        let mut tx = conn
-            .start_transaction(mysql_async::TxOpts::default())
-            .await
-            .map_err(|e| InterfaceError::Db(format!("Failed to start a transaction: {e}")))?;
-        let uid = match create_(uid, owner, object, attributes, tags, &mut tx).await {
-            Ok(uid) => uid,
-            Err(e) => {
-                tx.rollback().await.map_err(|re| {
-                    InterfaceError::Db(format!("transaction rollback failed: {re}"))
-                })?;
-                return Err(InterfaceError::Db(format!(
-                    "creation of object failed: {e}"
-                )));
+        let max_retries = 3_u32;
+        let mut attempt = 0_u32;
+        loop {
+            let mut conn = self
+                .pool
+                .get_conn()
+                .await
+                .map_err(|e| InterfaceError::Db(format!("Failed to get a connection: {e}")))?;
+            let mut tx = conn
+                .start_transaction(mysql_async::TxOpts::default())
+                .await
+                .map_err(|e| InterfaceError::Db(format!("Failed to start a transaction: {e}")))?;
+            let uid_res = create_(uid.clone(), owner, object, attributes, tags, &mut tx).await;
+            let uid = match uid_res {
+                Ok(u) => u,
+                Err(e) => {
+                    tx.rollback().await.map_err(|re| {
+                        InterfaceError::Db(format!("transaction rollback failed: {re}"))
+                    })?;
+                    let is_deadlock = matches!(
+                        &e,
+                        crate::DbError::SqlError(msg) | crate::DbError::DatabaseError(msg)
+                        if msg.contains("Deadlock found when trying to get lock")
+                    );
+                    if is_deadlock && attempt < max_retries {
+                        attempt += 1;
+                        let delay_ms = 20_u64 * 3_u64.pow(attempt - 1);
+                        tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
+                        continue;
+                    }
+                    return Err(InterfaceError::Db(format!("creation of object failed: {e}")));
+                }
+            };
+            match tx.commit().await {
+                Ok(()) => return Ok(uid),
+                Err(e) => {
+                    let msg = e.to_string();
+                    let is_deadlock = msg.contains("Deadlock found when trying to get lock");
+                    if is_deadlock && attempt < max_retries {
+                        attempt += 1;
+                        let delay_ms = 20_u64 * 3_u64.pow(attempt - 1);
+                        tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
+                        continue;
+                    }
+                    return Err(InterfaceError::Db(format!(
+                        "Failed to commit the transaction: {e}"
+                    )));
+                }
             }
-        };
-        tx.commit()
-            .await
-            .map_err(|e| InterfaceError::Db(format!("Failed to commit the transaction: {e}")))?;
-        Ok(uid)
+        }
     }
 
     async fn retrieve(&self, uid: &str) -> InterfaceResult<Option<ObjectWithMetadata>> {
@@ -212,81 +238,160 @@ impl ObjectsStore for MySqlPool {
         attributes: &Attributes,
         tags: Option<&HashSet<String>>,
     ) -> InterfaceResult<()> {
-        let mut conn = self
-            .pool
-            .get_conn()
-            .await
-            .map_err(|e| InterfaceError::Db(format!("Failed to get a connection: {e}")))?;
-        let mut tx = conn
-            .start_transaction(mysql_async::TxOpts::default())
-            .await
-            .map_err(|e| InterfaceError::Db(format!("Failed to start a transaction: {e}")))?;
-        match update_object_(uid, object, attributes, tags, &mut tx).await {
-            Ok(()) => {
-                tx.commit().await.map_err(|e| {
-                    InterfaceError::Db(format!("Failed to commit the transaction: {e}"))
-                })?;
-                Ok(())
-            }
-            Err(e) => {
-                tx.rollback().await.map_err(|re| {
-                    InterfaceError::Db(format!("transaction rollback failed: {re}"))
-                })?;
-                Err(InterfaceError::Db(format!("update of object failed: {e}")))
+        let max_retries = 3_u32;
+        let mut attempt = 0_u32;
+        loop {
+            let mut conn = self
+                .pool
+                .get_conn()
+                .await
+                .map_err(|e| InterfaceError::Db(format!("Failed to get a connection: {e}")))?;
+            let mut tx = conn
+                .start_transaction(mysql_async::TxOpts::default())
+                .await
+                .map_err(|e| InterfaceError::Db(format!("Failed to start a transaction: {e}")))?;
+            match update_object_(uid, object, attributes, tags, &mut tx).await {
+                Ok(()) => match tx.commit().await {
+                    Ok(()) => return Ok(()),
+                    Err(e) => {
+                        let msg = e.to_string();
+                        let is_deadlock = msg.contains("Deadlock found when trying to get lock");
+                        if is_deadlock && attempt < max_retries {
+                            attempt += 1;
+                            let delay_ms = 20_u64 * 3_u64.pow(attempt - 1);
+                            tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
+                            continue;
+                        }
+                        return Err(InterfaceError::Db(format!(
+                            "Failed to commit the transaction: {e}"
+                        )));
+                    }
+                },
+                Err(e) => {
+                    tx.rollback().await.map_err(|re| {
+                        InterfaceError::Db(format!("transaction rollback failed: {re}"))
+                    })?;
+                    let is_deadlock = matches!(
+                        &e,
+                        crate::DbError::SqlError(msg) | crate::DbError::DatabaseError(msg)
+                        if msg.contains("Deadlock found when trying to get lock")
+                    );
+                    if is_deadlock && attempt < max_retries {
+                        attempt += 1;
+                        let delay_ms = 20_u64 * 3_u64.pow(attempt - 1);
+                        tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
+                        continue;
+                    }
+                    return Err(InterfaceError::Db(format!(
+                        "update of object failed: {e}"
+                    )));
+                }
             }
         }
     }
 
     async fn update_state(&self, uid: &str, state: State) -> InterfaceResult<()> {
-        let mut conn = self
-            .pool
-            .get_conn()
-            .await
-            .map_err(|e| InterfaceError::Db(format!("Failed to get a connection: {e}")))?;
-        let mut tx = conn
-            .start_transaction(mysql_async::TxOpts::default())
-            .await
-            .map_err(|e| InterfaceError::Db(format!("Failed to start a transaction: {e}")))?;
-        match update_state_(uid, state, &mut tx).await {
-            Ok(()) => {
-                tx.commit().await.map_err(|e| {
-                    InterfaceError::Db(format!("Failed to commit the transaction: {e}"))
-                })?;
-                Ok(())
-            }
-            Err(e) => {
-                tx.rollback().await.map_err(|re| {
-                    InterfaceError::Db(format!("transaction rollback failed: {re}"))
-                })?;
-                Err(InterfaceError::Db(format!(
-                    "update of the state of object {uid} failed: {e}"
-                )))
+        let max_retries = 3_u32;
+        let mut attempt = 0_u32;
+        loop {
+            let mut conn = self
+                .pool
+                .get_conn()
+                .await
+                .map_err(|e| InterfaceError::Db(format!("Failed to get a connection: {e}")))?;
+            let mut tx = conn
+                .start_transaction(mysql_async::TxOpts::default())
+                .await
+                .map_err(|e| InterfaceError::Db(format!("Failed to start a transaction: {e}")))?;
+            match update_state_(uid, state, &mut tx).await {
+                Ok(()) => match tx.commit().await {
+                    Ok(()) => return Ok(()),
+                    Err(e) => {
+                        let msg = e.to_string();
+                        let is_deadlock = msg.contains("Deadlock found when trying to get lock");
+                        if is_deadlock && attempt < max_retries {
+                            attempt += 1;
+                            let delay_ms = 20_u64 * 3_u64.pow(attempt - 1);
+                            tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
+                            continue;
+                        }
+                        return Err(InterfaceError::Db(format!(
+                            "Failed to commit the transaction: {e}"
+                        )));
+                    }
+                },
+                Err(e) => {
+                    tx.rollback().await.map_err(|re| {
+                        InterfaceError::Db(format!("transaction rollback failed: {re}"))
+                    })?;
+                    let is_deadlock = matches!(
+                        &e,
+                        crate::DbError::SqlError(msg) | crate::DbError::DatabaseError(msg)
+                        if msg.contains("Deadlock found when trying to get lock")
+                    );
+                    if is_deadlock && attempt < max_retries {
+                        attempt += 1;
+                        let delay_ms = 20_u64 * 3_u64.pow(attempt - 1);
+                        tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
+                        continue;
+                    }
+                    return Err(InterfaceError::Db(format!(
+                        "update of the state of object {uid} failed: {e}"
+                    )));
+                }
             }
         }
     }
 
     async fn delete(&self, uid: &str) -> InterfaceResult<()> {
-        let mut conn = self
-            .pool
-            .get_conn()
-            .await
-            .map_err(|e| InterfaceError::Db(format!("Failed to get a connection: {e}")))?;
-        let mut tx = conn
-            .start_transaction(mysql_async::TxOpts::default())
-            .await
-            .map_err(|e| InterfaceError::Db(format!("Failed to start a transaction: {e}")))?;
-        match delete_(uid, &mut tx).await {
-            Ok(()) => {
-                tx.commit().await.map_err(|e| {
-                    InterfaceError::Db(format!("Failed to commit the transaction: {e}"))
-                })?;
-                Ok(())
-            }
-            Err(e) => {
-                tx.rollback().await.map_err(|re| {
-                    InterfaceError::Db(format!("transaction rollback failed: {re}"))
-                })?;
-                Err(InterfaceError::Db(format!("delete of object failed: {e}")))
+        let max_retries = 3_u32;
+        let mut attempt = 0_u32;
+        loop {
+            let mut conn = self
+                .pool
+                .get_conn()
+                .await
+                .map_err(|e| InterfaceError::Db(format!("Failed to get a connection: {e}")))?;
+            let mut tx = conn
+                .start_transaction(mysql_async::TxOpts::default())
+                .await
+                .map_err(|e| InterfaceError::Db(format!("Failed to start a transaction: {e}")))?;
+            match delete_(uid, &mut tx).await {
+                Ok(()) => match tx.commit().await {
+                    Ok(()) => return Ok(()),
+                    Err(e) => {
+                        let msg = e.to_string();
+                        let is_deadlock = msg.contains("Deadlock found when trying to get lock");
+                        if is_deadlock && attempt < max_retries {
+                            attempt += 1;
+                            let delay_ms = 20_u64 * 3_u64.pow(attempt - 1);
+                            tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
+                            continue;
+                        }
+                        return Err(InterfaceError::Db(format!(
+                            "Failed to commit the transaction: {e}"
+                        )));
+                    }
+                },
+                Err(e) => {
+                    tx.rollback().await.map_err(|re| {
+                        InterfaceError::Db(format!("transaction rollback failed: {re}"))
+                    })?;
+                    let is_deadlock = matches!(
+                        &e,
+                        crate::DbError::SqlError(msg) | crate::DbError::DatabaseError(msg)
+                        if msg.contains("Deadlock found when trying to get lock")
+                    );
+                    if is_deadlock && attempt < max_retries {
+                        attempt += 1;
+                        let delay_ms = 20_u64 * 3_u64.pow(attempt - 1);
+                        tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
+                        continue;
+                    }
+                    return Err(InterfaceError::Db(format!(
+                        "delete of object failed: {e}"
+                    )));
+                }
             }
         }
     }
