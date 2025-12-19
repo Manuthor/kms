@@ -80,33 +80,44 @@ SYS_GCC="/usr/bin/gcc"
 
 # Utimaco integration test (KMS)
 
-# Prefer a rustup toolchain matching rust-toolchain.toml to avoid cargo/rustc mismatch.
-# Fallback to nix-provided cargo, then to PATH cargo.
-TOOLCHAIN="1.91.0"
+# Prefer rustup toolchain pinned to 1.91.0 when available to match repository toolchain
 if command -v rustup >/dev/null 2>&1; then
-  rustup toolchain install "$TOOLCHAIN"
-  # Add components if available for this toolchain; ignore if not supported
-  rustup component add --toolchain "$TOOLCHAIN" rustfmt clippy || true
-  CARGO_CMD=(rustup run "$TOOLCHAIN" cargo)
-else
-  # shellcheck disable=SC2012
-  NIX_CARGO="$(ls -1 /nix/store/*-cargo-*/bin/cargo 2>/dev/null | head -n1 || true)"
-  if [ -x "$NIX_CARGO" ]; then
-    CARGO_CMD=("$NIX_CARGO")
+  # Ensure toolchain is installed (non-interactive)
+  rustup toolchain install 1.91.0 >/dev/null 2>&1 || true
+  # Prefer rustup-managed cargo shim if present in user profile
+  if [ -x "$HOME/.cargo/bin/cargo" ]; then
+    CARGO_CMD="$HOME/.cargo/bin/cargo"
   else
-    CARGO_CMD=(cargo)
+    RUSTUP_CARGO="$(rustup which cargo --toolchain 1.91.0 2>/dev/null || true)"
+    if [ -x "$RUSTUP_CARGO" ]; then
+      CARGO_CMD="$RUSTUP_CARGO"
+    fi
   fi
 fi
 
-# Make zlib available for dynamically linked rustc/cc when not statically provided
-ZLIB_LIB_DIR=""
-if [ -n "${NIX_ZLIB_LIB:-}" ] && [ -d "${NIX_ZLIB_LIB}" ]; then
-  ZLIB_LIB_DIR="${NIX_ZLIB_LIB}"
+# Fallbacks when rustup is not available or did not yield a cargo path
+if [ -z "${CARGO_CMD:-}" ]; then
+  # Try user/default cargo on PATH first
+  if command -v cargo >/dev/null 2>&1; then
+    CARGO_CMD="$(command -v cargo)"
+  else
+    # Prefer nix-provided cargo as last resort
+    # shellcheck disable=SC2012
+    NIX_CARGO="$(ls -1 /nix/store/*-cargo-*/bin/cargo 2>/dev/null | head -n1 || true)"
+    if [ -x "$NIX_CARGO" ]; then
+      CARGO_CMD="$NIX_CARGO"
+    else
+      CARGO_CMD="cargo"
+    fi
+  fi
 fi
+
+# Ensure a clean build when switching toolchains to avoid rmeta mismatches
+RUSTUP_TOOLCHAIN=1.91.0 "$CARGO_CMD" clean || true
 
 env \
   PATH="/usr/bin:/bin:$PATH" \
-  LD_LIBRARY_PATH="${UTIMACO_LIB_DIR}:${ZLIB_LIB_DIR:+$ZLIB_LIB_DIR:}${LD_LIBRARY_PATH:-}" \
+  LD_LIBRARY_PATH="${UTIMACO_LIB_DIR}:${LD_LIBRARY_PATH:-}" \
   CC="$SYS_CC" \
   AR="$SYS_AR" \
   LD="$SYS_LD" \
@@ -127,7 +138,7 @@ env \
   HSM_SLOT_ID="0" \
   UTIMACO_PKCS11_LIB="$UTIMACO_PKCS11_LIB" \
   CS_PKCS11_R3_CFG="$CS_PKCS11_R3_CFG" \
-  "${CARGO_CMD[@]}" test \
+  RUSTUP_TOOLCHAIN=1.91.0 "$CARGO_CMD" test \
   -p cosmian_kms_server \
   ${FEATURES_FLAG[@]+"${FEATURES_FLAG[@]}"} \
   "$RELEASE_FLAG" \
@@ -137,7 +148,7 @@ env \
 
 env \
   PATH="/usr/bin:/bin:$PATH" \
-  LD_LIBRARY_PATH="${UTIMACO_LIB_DIR}:${ZLIB_LIB_DIR:+$ZLIB_LIB_DIR:}${LD_LIBRARY_PATH:-}" \
+  LD_LIBRARY_PATH="${UTIMACO_LIB_DIR}:${LD_LIBRARY_PATH:-}" \
   CC="$SYS_CC" \
   AR="$SYS_AR" \
   LD="$SYS_LD" \
@@ -158,19 +169,19 @@ env \
   HSM_SLOT_ID="0" \
   UTIMACO_PKCS11_LIB="$UTIMACO_PKCS11_LIB" \
   CS_PKCS11_R3_CFG="$CS_PKCS11_R3_CFG" \
-  "${CARGO_CMD[@]}" test \
+  RUSTUP_TOOLCHAIN=1.91.0 "$CARGO_CMD" test \
   -p utimaco_pkcs11_loader \
   ${RELEASE_FLAG:+$RELEASE_FLAG} \
   --features utimaco \
   -- tests::test_hsm_utimaco_all --ignored
 
 MISSING_GOOGLE_ENV=false
-for var in TEST_GOOGLE_OAUTH_CLIENT_ID TEST_GOOGLE_OAUTH_CLIENT_SECRET TEST_GOOGLE_OAUTH_REFRESH_TOKEN; do
-  if [ -z "${!var:-}" ]; then
-    MISSING_GOOGLE_ENV=true
-    break
-  fi
-done
+# for var in TEST_GOOGLE_OAUTH_CLIENT_ID TEST_GOOGLE_OAUTH_CLIENT_SECRET TEST_GOOGLE_OAUTH_REFRESH_TOKEN; do
+#   if [ -z "${!var:-}" ]; then
+#     MISSING_GOOGLE_ENV=true
+#     break
+#   fi
+# done
 
 if [ "$MISSING_GOOGLE_ENV" = true ]; then
   echo "Skipping Google CSE CLI tests: required env vars are not set."
@@ -204,14 +215,9 @@ else
   if [ -n "${OPENSSL_LIB_DIR}" ]; then
     CLI_CARGO_LDPATH="${CLI_CARGO_LDPATH}:${OPENSSL_LIB_DIR}"
   fi
-  if [ -n "${ZLIB_LIB_DIR}" ]; then
-    CLI_CARGO_LDPATH="${CLI_CARGO_LDPATH}:${ZLIB_LIB_DIR}"
-  fi
 
   # Run CLI tests via cargo (mandatory)
   env \
-    OPENSSL_CONF="${OPENSSL_CONF:-}" \
-    OPENSSL_MODULES="${OPENSSL_MODULES:-}" \
     PATH="/usr/bin:/bin:$PATH" \
     LD_LIBRARY_PATH="${CLI_CARGO_LDPATH}" \
     CC="$SYS_CC" \
@@ -234,15 +240,13 @@ else
     HSM_SLOT_ID="0" \
     UTIMACO_PKCS11_LIB="$UTIMACO_PKCS11_LIB" \
     CS_PKCS11_R3_CFG="$CS_PKCS11_R3_CFG" \
-    "${CARGO_CMD[@]}" test -p cosmian_kms_cli \
+    RUSTUP_TOOLCHAIN=1.91.0 "$CARGO_CMD" test -p cosmian_kms_cli \
     ${FEATURES_FLAG[@]+"${FEATURES_FLAG[@]}"} \
     ${RELEASE_FLAG:+$RELEASE_FLAG} \
     -- kmip_2_1_xml_pkcs11_m_1_21 --ignored
 
   # Run CLI tests via cargo (mandatory)
   env \
-    OPENSSL_CONF="${OPENSSL_CONF:-}" \
-    OPENSSL_MODULES="${OPENSSL_MODULES:-}" \
     PATH="/usr/bin:/bin:$PATH" \
     LD_LIBRARY_PATH="${CLI_CARGO_LDPATH}" \
     CC="$SYS_CC" \
@@ -265,7 +269,7 @@ else
     HSM_SLOT_ID="0" \
     UTIMACO_PKCS11_LIB="$UTIMACO_PKCS11_LIB" \
     CS_PKCS11_R3_CFG="$CS_PKCS11_R3_CFG" \
-    "${CARGO_CMD[@]}" test -p cosmian_kms_cli \
+    RUSTUP_TOOLCHAIN=1.91.0 "$CARGO_CMD" test -p cosmian_kms_cli \
     ${FEATURES_FLAG[@]+"${FEATURES_FLAG[@]}"} \
     ${RELEASE_FLAG:+$RELEASE_FLAG} \
     -- hsm_google_cse --ignored
