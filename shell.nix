@@ -143,7 +143,10 @@ pkgs228.mkShell {
           export NIX_ZLIB_LIB="${pkgs228.zlib}/lib"
         ''
       else
-        ""
+        ''
+          # Ensure zlib path is available to stdenv fixup on macOS
+          export NIX_ZLIB_LIB="${pkgs228.zlib}/lib"
+        ''
     }
     # --- Begin inlined nix/shell-hook.sh ---
     set -euo pipefail
