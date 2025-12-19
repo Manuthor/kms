@@ -7,6 +7,12 @@ trap 'echo "FAIL: test_hsm_utimaco.sh at line $LINENO" >&2' ERR
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 source "$SCRIPT_DIR/common.sh"
 
+# Use sudo only if available and not running as root
+SUDO=""
+if command -v sudo >/dev/null 2>&1 && [ "$(id -u)" != "0" ]; then
+  SUDO="sudo -E"
+fi
+
 REPO_ROOT=$(get_repo_root "$SCRIPT_DIR")
 init_build_env "$@"
 setup_test_logging
@@ -74,7 +80,6 @@ SYS_GCC="/usr/bin/gcc"
 [ -x "$SYS_GCC" ] || SYS_GCC="$(command -v gcc || true)"
 
 # Utimaco integration test (KMS)
-SYS_LD_PATHS=""
 
 env \
   PATH="/usr/bin:/bin:$PATH" \
@@ -106,7 +111,6 @@ env \
   -- tests::hsm::test_hsm_all --ignored --exact
 
 # Utimaco loader test (no system lib dirs, scoped runtime)
-SYS_LD_PATHS=""
 
 env \
   PATH="/usr/bin:/bin:$PATH" \
@@ -148,9 +152,10 @@ done
 if [ "$MISSING_GOOGLE_ENV" = true ]; then
   echo "Skipping Google CSE CLI tests: required env vars are not set."
   echo "Set TEST_GOOGLE_OAUTH_CLIENT_ID, TEST_GOOGLE_OAUTH_CLIENT_SECRET, TEST_GOOGLE_OAUTH_REFRESH_TOKEN, GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY to enable."
+  exit 1
 else
   # shellcheck disable=SC2086
-  sudo -E env "PATH=/usr/bin:/bin:$PATH" \
+  ${SUDO} env "PATH=/usr/bin:/bin:$PATH" \
     LD_LIBRARY_PATH="${UTIMACO_LIB_DIR}:${DYN_OPENSSL_LIB:+$DYN_OPENSSL_LIB:}${NIX_OPENSSL_OUT:+$NIX_OPENSSL_OUT/lib:}${LD_LIBRARY_PATH:-}" \
     HSM_MODEL="utimaco" \
     HSM_USER_PASSWORD="$HSM_USER_PASSWORD" \
@@ -167,7 +172,7 @@ else
     -- --nocapture kmip_2_1_xml_pkcs11_m_1_21 --ignored
 
   # shellcheck disable=SC2086
-  sudo -E env "PATH=/usr/bin:/bin:$PATH" \
+  ${SUDO} env "PATH=/usr/bin:/bin:$PATH" \
     LD_LIBRARY_PATH="${UTIMACO_LIB_DIR}:${DYN_OPENSSL_LIB:+$DYN_OPENSSL_LIB:}${NIX_OPENSSL_OUT:+$NIX_OPENSSL_OUT/lib:}${LD_LIBRARY_PATH:-}" \
     HSM_MODEL="utimaco" \
     HSM_USER_PASSWORD="$HSM_USER_PASSWORD" \
