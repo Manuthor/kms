@@ -145,33 +145,6 @@ init_build_env() {
       i=$((i + 1))
       link="${!i:-}"
       ;;
-    -p)
-      if [ $profile_set -eq 1 ]; then
-        echo "Error: -p/--profile specified multiple times" >&2
-        exit 1
-      fi
-      profile_set=1
-      i=$((i + 1))
-      profile="${!i:-}"
-      ;;
-    -v)
-      if [ $variant_set -eq 1 ]; then
-        echo "Error: -v/--variant specified multiple times" >&2
-        exit 1
-      fi
-      variant_set=1
-      i=$((i + 1))
-      variant="${!i:-}"
-      ;;
-    -l)
-      if [ $link_set -eq 1 ]; then
-        echo "Error: -l/--link specified multiple times" >&2
-        exit 1
-      fi
-      link_set=1
-      i=$((i + 1))
-      link="${!i:-}"
-      ;;
     esac
     i=$((i + 1))
   done

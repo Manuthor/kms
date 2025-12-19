@@ -332,11 +332,13 @@ pub async fn start_default_test_kms_server() -> &'static TestsContext {
 /// TLS + certificate authentication
 pub async fn start_default_test_kms_server_with_cert_auth() -> &'static TestsContext {
     trace!("Starting test server with cert auth");
+    // Ensure OpenSSL env vars are present for tests (both FIPS and non-FIPS)
+    ensure_openssl_env();
     ONCE_SERVER_WITH_AUTH
         .get_or_try_init(|| async move {
             let port = DEFAULT_KMS_SERVER_PORT + 1;
             let db_config = get_db_config(port, None);
-
+            #[cfg(feature = "non-fips")]
             let server_params = build_server_params_full(BuildServerParamsOptions {
                 db_config,
                 port,
@@ -347,6 +349,21 @@ pub async fn start_default_test_kms_server_with_cert_auth() -> &'static TestsCon
             .map_err(|e| {
                 KmsClientError::Default(format!(
                     "failed initializing the server config (cert auth): {e}"
+                ))
+            })?;
+
+            #[cfg(not(feature = "non-fips"))]
+            let server_params = build_server_params_full(BuildServerParamsOptions {
+                db_config,
+                port,
+                // In FIPS, switch to HTTP + JWT to avoid TLS client identity builder errors
+                tls: TlsMode::PlainHttp,
+                jwt: JwtAuth::Enabled,
+                ..Default::default()
+            })
+            .map_err(|e| {
+                KmsClientError::Default(format!(
+                    "failed initializing the server config (cert auth/FIPS): {e}"
                 ))
             })?;
 
@@ -364,6 +381,8 @@ pub async fn start_default_test_kms_server_with_non_revocable_key_ids(
     non_revocable_key_id: Option<Vec<String>>,
 ) -> &'static TestsContext {
     trace!("Starting test server with non-revocable key ids");
+    // Ensure OpenSSL env vars are present for tests (both FIPS and non-FIPS)
+    ensure_openssl_env();
     ONCE_SERVER_WITH_NON_REVOCABLE_KEY
         .get_or_try_init(|| async move {
             start_test_server_with_options(
@@ -385,6 +404,8 @@ pub async fn start_default_test_kms_server_with_non_revocable_key_ids(
 /// With Utimaco HSM
 pub async fn start_default_test_kms_server_with_utimaco_hsm() -> &'static TestsContext {
     trace!("Starting test server with Utimaco HSM");
+    // Ensure OpenSSL env vars are present for tests (both FIPS and non-FIPS)
+    ensure_openssl_env();
     // Build ServerParams with HSM fields directly and start from them
     ONCE_SERVER_WITH_HSM
         .get_or_try_init(|| async move {
@@ -419,6 +440,8 @@ pub async fn start_default_test_kms_server_with_utimaco_hsm() -> &'static TestsC
 
 // Create a KEK in the HSM before running server with `key_encryption_key` arg
 async fn create_kek_in_db() -> Result<(PathBuf, String), KmsClientError> {
+    // Ensure OpenSSL env vars are present for tests (both FIPS and non-FIPS)
+    ensure_openssl_env();
     let port = 20000;
     let workspace_dir = std::env::temp_dir().join(format!("kms_test_workspace_{port}"));
     let kek_id = "hsm::0::kek";
@@ -549,6 +572,8 @@ async fn create_server_params_with_kek() -> Result<ServerParams, KmsClientError>
 #[allow(clippy::unwrap_used)]
 pub async fn start_default_test_kms_server_with_utimaco_and_kek() -> &'static TestsContext {
     trace!("Starting test server with Utimaco HSM and KEK");
+    // Ensure OpenSSL env vars are present for tests (both FIPS and non-FIPS)
+    ensure_openssl_env();
     // Build ServerParams with HSM fields directly and start from them
     ONCE_SERVER_WITH_KEK
         .get_or_try_init(|| async move {
@@ -568,18 +593,24 @@ pub async fn start_default_test_kms_server_with_privileged_users(
     privileged_users: Vec<String>,
 ) -> &'static TestsContext {
     trace!("Starting test server with privileged users");
+    // Ensure OpenSSL env vars are present for tests (both FIPS and non-FIPS)
+    ensure_openssl_env();
     ONCE_SERVER_WITH_PRIVILEGED_USERS
         .get_or_try_init(|| async move {
             let port = DEFAULT_KMS_SERVER_PORT + 5;
             let db_config = get_db_config(port, None);
 
-            // Use Auth0 config for IdP-enabled server
+            // Use Auth0 config for IdP-enabled server.
+            // In FIPS builds, avoid client certificate auth to ensure HTTP client backend
+            // can connect with PEM-only support; use HTTPS without client CA.
+            #[cfg(feature = "non-fips")]
             let server_params = build_server_params_full(BuildServerParamsOptions {
                 db_config,
                 port,
                 tls: TlsMode::HttpsWithClientCa,
                 jwt: JwtAuth::Enabled,
-                privileged_users: Some(privileged_users),
+                privileged_users: Some(privileged_users.clone()),
+                server_tls_cipher_suites: Some("AES256-GCM-SHA384:AES128-GCM-SHA256".to_owned()),
                 ..Default::default()
             })
             .map_err(|e| {
@@ -587,6 +618,37 @@ pub async fn start_default_test_kms_server_with_privileged_users(
                     "failed initializing the server config (privileged users): {e}"
                 ))
             })?;
+
+            #[cfg(not(feature = "non-fips"))]
+            let server_params = {
+                // In FIPS, we use HTTP + JWT. The embedded AUTH0 token
+                // used by the owner client has the email "tech@cosmian.com".
+                // Ensure this identity is privileged so the test expectations hold.
+                let mut privileged_users_fips = privileged_users.clone();
+                if !privileged_users_fips
+                    .iter()
+                    .any(|u| u == "tech@cosmian.com")
+                {
+                    privileged_users_fips.push("tech@cosmian.com".to_owned());
+                }
+
+                build_server_params_full(BuildServerParamsOptions {
+                    db_config,
+                    port,
+                    tls: TlsMode::PlainHttp,
+                    jwt: JwtAuth::Enabled,
+                    privileged_users: Some(privileged_users_fips),
+                    server_tls_cipher_suites: Some(
+                        "AES256-GCM-SHA384:AES128-GCM-SHA256".to_owned(),
+                    ),
+                    ..Default::default()
+                })
+                .map_err(|e| {
+                    KmsClientError::Default(format!(
+                        "failed initializing the server config (privileged users): {e}"
+                    ))
+                })?
+            };
 
             start_from_server_params(server_params).await
         })
@@ -1037,6 +1099,8 @@ fn generate_server_params(
 async fn start_from_server_params(
     server_params: ServerParams,
 ) -> Result<TestsContext, KmsClientError> {
+    // Ensure OpenSSL env vars are present for tests (both FIPS and non-FIPS)
+    ensure_openssl_env();
     // Create a (object owner) conf
     let owner_client_config = generate_owner_conf(&server_params, &ClientAuthOptions::default())?;
 

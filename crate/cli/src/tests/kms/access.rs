@@ -271,9 +271,16 @@ pub(crate) async fn test_grant_error() -> KmsCliResult<()> {
     .unwrap_err();
 
     // grant to myself
+    // In non-FIPS (mTLS cert-auth), the owner CN is "owner.client@acme.com".
+    // In FIPS (HTTP + JWT), the owner email is "tech@cosmian.com" per AUTH0 token.
+    #[cfg(feature = "non-fips")]
+    let self_user = "owner.client@acme.com";
+    #[cfg(not(feature = "non-fips"))]
+    let self_user = "tech@cosmian.com";
+
     GrantAccess {
         object_uid: Some(key_id.to_string()),
-        user: "owner.client@acme.com".to_owned(),
+        user: self_user.to_owned(),
         operations: vec![KmipOperation::Get],
     }
     .run(ctx.get_owner_client())
