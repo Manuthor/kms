@@ -84,7 +84,6 @@ num-bigint-dig = { workspace = true, features = [
     "serde",
     "zeroize",
 ] }
-openidconnect = { version = "4.0", features = ["reqwest", "native-tls"] }
 openssl = { workspace = true }
 opentelemetry = { workspace = true }
 opentelemetry-otlp = { workspace = true }
