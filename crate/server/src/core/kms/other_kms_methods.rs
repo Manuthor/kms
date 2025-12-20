@@ -40,6 +40,7 @@ impl KMS {
     /// * `uid` - The unique identifier of the object
     /// * `object` - The object to unwrap
     /// * `user` - The user requesting the unwrapped object
+    /// * `params` - Extra parameters for the store
     /// # Errors
     /// If the object is not a key object
     pub async fn get_unwrapped(&self, uid: &str, object: &Object, user: &str) -> KResult<Object> {

@@ -1,5 +1,3 @@
-// SessionParams removed; helpers are now paramless
-
 use cosmian_kms_server_database::reexport::{
     cosmian_kmip::{
         KmipError,
@@ -391,6 +389,7 @@ async fn post_process_private_key(
     kms: &KMS,
     operation_type: KmipOperation,
     user: &str,
+
     request: &Export,
     owm: &mut ObjectWithMetadata,
 ) -> Result<(), KmsError> {
@@ -505,7 +504,6 @@ async fn post_process_active_private_key(
             key_format_type,
             kms,
             user,
-            // no session params
         ))
         .await;
     }
@@ -878,6 +876,7 @@ async fn unwrap_if_requested(
     key_wrap_type: &Option<KeyWrapType>,
     kms: &KMS,
     user: &str,
+
     object_type: ObjectType,
 ) -> Result<(), KmsError> {
     let mut key_wrap_type = *key_wrap_type;
@@ -1161,6 +1160,7 @@ async fn build_pkcs12_for_private_key(
     kms: &KMS,
     operation_type: KmipOperation,
     user: &str,
+
     request: &Export,
     private_key_owm: &mut ObjectWithMetadata,
 ) -> Result<(), KmsError> {

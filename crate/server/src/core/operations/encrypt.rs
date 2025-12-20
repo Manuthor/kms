@@ -1,5 +1,3 @@
-// SessionParams removed; encrypt is now paramless
-
 #[cfg(feature = "non-fips")]
 use cosmian_kms_server_database::reexport::cosmian_kms_crypto::crypto::EncryptionSystem;
 #[cfg(feature = "non-fips")]

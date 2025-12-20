@@ -67,7 +67,7 @@ pub(crate) fn https_clap_config_opts(kms_public_url: Option<String>) -> ClapConf
             database_type: Some("sqlite".to_owned()),
             database_url: None,
             sqlite_path,
-            clear_database: true,
+            clear_database: false,
             ..Default::default()
         },
         kms_public_url,

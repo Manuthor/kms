@@ -1,5 +1,3 @@
-// Session-wide database parameters removed
-
 use cosmian_kms_server_database::reexport::cosmian_kmip::{
     kmip_0::{
         kmip_messages::{RequestMessage, ResponseMessage},
@@ -601,6 +599,7 @@ impl KMS {
         &self,
         request: ReKeyKeyPair,
         user: &str,
+
         privileged_users: Option<Vec<String>>,
     ) -> KResult<ReKeyKeyPairResponse> {
         let span = tracing::span!(tracing::Level::ERROR, "rekey_keypair");

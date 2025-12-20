@@ -14,7 +14,7 @@ use cosmian_kms_server_database::reexport::{cosmian_kmip, cosmian_kms_crypto::cr
 use cosmian_kms_server_database::reexport::{ cosmian_kms_crypto::crypto::{
     cover_crypt::master_keys::create_master_keypair
 }};
-use cosmian_kms_server_database::reexport::cosmian_kms_interfaces::AtomicOperation;
+use cosmian_kms_server_database::reexport::cosmian_kms_interfaces::{AtomicOperation};
 use cosmian_kms_server_database::reexport::cosmian_kmip::kmip_2_1::{
     kmip_objects::ObjectType,
     kmip_operations::{CreateKeyPair, CreateKeyPairResponse},
@@ -37,6 +37,7 @@ pub(crate) async fn create_key_pair(
     kms: &KMS,
     request: CreateKeyPair,
     owner: &str,
+
     privileged_users: Option<Vec<String>>,
 ) -> KResult<CreateKeyPairResponse> {
     debug!("Create key pair: {request}");

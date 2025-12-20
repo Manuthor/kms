@@ -32,6 +32,25 @@ use crate::{
     },
 };
 
+// Deadlock handling parameters for MySQL (ER_LOCK_DEADLOCK = 1213)
+const MYSQL_DEADLOCK_MAX_RETRIES: u32 = 6;
+
+fn is_mysql_deadlock(msg: &str) -> bool {
+    // Match common forms from MySQL/MariaDB drivers and servers
+    // Examples:
+    // - "Deadlock found when trying to get lock; try restarting transaction"
+    // - "ERROR 40001 (1213): Deadlock found when trying to get lock; ..."
+    // - "ER_LOCK_DEADLOCK"
+    msg.contains("Deadlock found when trying to get lock")
+        || msg.contains("(1213)")
+        || msg.contains("ER_LOCK_DEADLOCK")
+}
+
+fn mysql_deadlock_backoff_ms(attempt: u32) -> u64 {
+    // Exponential-ish backoff: 50, 100, 200, 400, 800, 1600ms
+    50_u64.saturating_mul(1_u64 << attempt.min(10))
+}
+
 #[macro_export]
 macro_rules! get_mysql_query {
     ($name:literal) => {
@@ -171,7 +190,7 @@ impl ObjectsStore for MySqlPool {
         attributes: &Attributes,
         tags: &HashSet<String>,
     ) -> InterfaceResult<String> {
-        let max_retries = 3_u32;
+        let max_retries = MYSQL_DEADLOCK_MAX_RETRIES;
         let mut attempt = 0_u32;
         loop {
             let mut conn = self
@@ -179,6 +198,13 @@ impl ObjectsStore for MySqlPool {
                 .get_conn()
                 .await
                 .map_err(|e| InterfaceError::Db(format!("Failed to get a connection: {e}")))?;
+            // Reduce deadlocks and long stalls: use READ COMMITTED and a shorter lock wait timeout
+            conn.query_drop("SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED")
+                .await
+                .map_err(|e| InterfaceError::Db(format!("Failed to set isolation level: {e}")))?;
+            conn.query_drop("SET SESSION innodb_lock_wait_timeout=10")
+                .await
+                .map_err(|e| InterfaceError::Db(format!("Failed to set lock wait timeout: {e}")))?;
             let mut tx = conn
                 .start_transaction(mysql_async::TxOpts::default())
                 .await
@@ -193,11 +219,11 @@ impl ObjectsStore for MySqlPool {
                     let is_deadlock = matches!(
                         &e,
                         crate::DbError::SqlError(msg) | crate::DbError::DatabaseError(msg)
-                        if msg.contains("Deadlock found when trying to get lock")
+                        if is_mysql_deadlock(msg)
                     );
                     if is_deadlock && attempt < max_retries {
+                        let delay_ms = mysql_deadlock_backoff_ms(attempt);
                         attempt += 1;
-                        let delay_ms = 20_u64 * 3_u64.pow(attempt - 1);
                         tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
                         continue;
                     }
@@ -210,10 +236,10 @@ impl ObjectsStore for MySqlPool {
                 Ok(()) => return Ok(uid),
                 Err(e) => {
                     let msg = e.to_string();
-                    let is_deadlock = msg.contains("Deadlock found when trying to get lock");
+                    let is_deadlock = is_mysql_deadlock(&msg);
                     if is_deadlock && attempt < max_retries {
+                        let delay_ms = mysql_deadlock_backoff_ms(attempt);
                         attempt += 1;
-                        let delay_ms = 20_u64 * 3_u64.pow(attempt - 1);
                         tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
                         continue;
                     }
@@ -240,7 +266,7 @@ impl ObjectsStore for MySqlPool {
         attributes: &Attributes,
         tags: Option<&HashSet<String>>,
     ) -> InterfaceResult<()> {
-        let max_retries = 3_u32;
+        let max_retries = MYSQL_DEADLOCK_MAX_RETRIES;
         let mut attempt = 0_u32;
         loop {
             let mut conn = self
@@ -248,6 +274,12 @@ impl ObjectsStore for MySqlPool {
                 .get_conn()
                 .await
                 .map_err(|e| InterfaceError::Db(format!("Failed to get a connection: {e}")))?;
+            conn.query_drop("SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED")
+                .await
+                .map_err(|e| InterfaceError::Db(format!("Failed to set isolation level: {e}")))?;
+            conn.query_drop("SET SESSION innodb_lock_wait_timeout=10")
+                .await
+                .map_err(|e| InterfaceError::Db(format!("Failed to set lock wait timeout: {e}")))?;
             let mut tx = conn
                 .start_transaction(mysql_async::TxOpts::default())
                 .await
@@ -257,10 +289,10 @@ impl ObjectsStore for MySqlPool {
                     Ok(()) => return Ok(()),
                     Err(e) => {
                         let msg = e.to_string();
-                        let is_deadlock = msg.contains("Deadlock found when trying to get lock");
+                        let is_deadlock = is_mysql_deadlock(&msg);
                         if is_deadlock && attempt < max_retries {
+                            let delay_ms = mysql_deadlock_backoff_ms(attempt);
                             attempt += 1;
-                            let delay_ms = 20_u64 * 3_u64.pow(attempt - 1);
                             tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
                             continue;
                         }
@@ -276,11 +308,11 @@ impl ObjectsStore for MySqlPool {
                     let is_deadlock = matches!(
                         &e,
                         crate::DbError::SqlError(msg) | crate::DbError::DatabaseError(msg)
-                        if msg.contains("Deadlock found when trying to get lock")
+                        if is_mysql_deadlock(msg)
                     );
                     if is_deadlock && attempt < max_retries {
+                        let delay_ms = mysql_deadlock_backoff_ms(attempt);
                         attempt += 1;
-                        let delay_ms = 20_u64 * 3_u64.pow(attempt - 1);
                         tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
                         continue;
                     }
@@ -291,7 +323,7 @@ impl ObjectsStore for MySqlPool {
     }
 
     async fn update_state(&self, uid: &str, state: State) -> InterfaceResult<()> {
-        let max_retries = 3_u32;
+        let max_retries = MYSQL_DEADLOCK_MAX_RETRIES;
         let mut attempt = 0_u32;
         loop {
             let mut conn = self
@@ -299,6 +331,12 @@ impl ObjectsStore for MySqlPool {
                 .get_conn()
                 .await
                 .map_err(|e| InterfaceError::Db(format!("Failed to get a connection: {e}")))?;
+            conn.query_drop("SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED")
+                .await
+                .map_err(|e| InterfaceError::Db(format!("Failed to set isolation level: {e}")))?;
+            conn.query_drop("SET SESSION innodb_lock_wait_timeout=10")
+                .await
+                .map_err(|e| InterfaceError::Db(format!("Failed to set lock wait timeout: {e}")))?;
             let mut tx = conn
                 .start_transaction(mysql_async::TxOpts::default())
                 .await
@@ -308,10 +346,10 @@ impl ObjectsStore for MySqlPool {
                     Ok(()) => return Ok(()),
                     Err(e) => {
                         let msg = e.to_string();
-                        let is_deadlock = msg.contains("Deadlock found when trying to get lock");
+                        let is_deadlock = is_mysql_deadlock(&msg);
                         if is_deadlock && attempt < max_retries {
+                            let delay_ms = mysql_deadlock_backoff_ms(attempt);
                             attempt += 1;
-                            let delay_ms = 20_u64 * 3_u64.pow(attempt - 1);
                             tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
                             continue;
                         }
@@ -327,11 +365,11 @@ impl ObjectsStore for MySqlPool {
                     let is_deadlock = matches!(
                         &e,
                         crate::DbError::SqlError(msg) | crate::DbError::DatabaseError(msg)
-                        if msg.contains("Deadlock found when trying to get lock")
+                        if is_mysql_deadlock(msg)
                     );
                     if is_deadlock && attempt < max_retries {
+                        let delay_ms = mysql_deadlock_backoff_ms(attempt);
                         attempt += 1;
-                        let delay_ms = 20_u64 * 3_u64.pow(attempt - 1);
                         tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
                         continue;
                     }
@@ -344,7 +382,7 @@ impl ObjectsStore for MySqlPool {
     }
 
     async fn delete(&self, uid: &str) -> InterfaceResult<()> {
-        let max_retries = 3_u32;
+        let max_retries = MYSQL_DEADLOCK_MAX_RETRIES;
         let mut attempt = 0_u32;
         loop {
             let mut conn = self
@@ -352,6 +390,12 @@ impl ObjectsStore for MySqlPool {
                 .get_conn()
                 .await
                 .map_err(|e| InterfaceError::Db(format!("Failed to get a connection: {e}")))?;
+            conn.query_drop("SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED")
+                .await
+                .map_err(|e| InterfaceError::Db(format!("Failed to set isolation level: {e}")))?;
+            conn.query_drop("SET SESSION innodb_lock_wait_timeout=10")
+                .await
+                .map_err(|e| InterfaceError::Db(format!("Failed to set lock wait timeout: {e}")))?;
             let mut tx = conn
                 .start_transaction(mysql_async::TxOpts::default())
                 .await
@@ -361,10 +405,10 @@ impl ObjectsStore for MySqlPool {
                     Ok(()) => return Ok(()),
                     Err(e) => {
                         let msg = e.to_string();
-                        let is_deadlock = msg.contains("Deadlock found when trying to get lock");
+                        let is_deadlock = is_mysql_deadlock(&msg);
                         if is_deadlock && attempt < max_retries {
+                            let delay_ms = mysql_deadlock_backoff_ms(attempt);
                             attempt += 1;
-                            let delay_ms = 20_u64 * 3_u64.pow(attempt - 1);
                             tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
                             continue;
                         }
@@ -380,11 +424,11 @@ impl ObjectsStore for MySqlPool {
                     let is_deadlock = matches!(
                         &e,
                         crate::DbError::SqlError(msg) | crate::DbError::DatabaseError(msg)
-                        if msg.contains("Deadlock found when trying to get lock")
+                        if is_mysql_deadlock(msg)
                     );
                     if is_deadlock && attempt < max_retries {
+                        let delay_ms = mysql_deadlock_backoff_ms(attempt);
                         attempt += 1;
-                        let delay_ms = 20_u64 * 3_u64.pow(attempt - 1);
                         tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
                         continue;
                     }
@@ -400,7 +444,7 @@ impl ObjectsStore for MySqlPool {
         operations: &[AtomicOperation],
     ) -> InterfaceResult<Vec<String>> {
         // Retry on MySQL deadlocks (ER_LOCK_DEADLOCK = 1213) with small backoff
-        let max_retries = 3_u32;
+        let max_retries = MYSQL_DEADLOCK_MAX_RETRIES;
         let mut attempt = 0_u32;
         loop {
             let mut conn = self
@@ -408,6 +452,12 @@ impl ObjectsStore for MySqlPool {
                 .get_conn()
                 .await
                 .map_err(|e| InterfaceError::Db(format!("Failed to get a connection: {e}")))?;
+            conn.query_drop("SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED")
+                .await
+                .map_err(|e| InterfaceError::Db(format!("Failed to set isolation level: {e}")))?;
+            conn.query_drop("SET SESSION innodb_lock_wait_timeout=10")
+                .await
+                .map_err(|e| InterfaceError::Db(format!("Failed to set lock wait timeout: {e}")))?;
             let mut tx = conn
                 .start_transaction(mysql_async::TxOpts::default())
                 .await
@@ -433,14 +483,14 @@ impl ObjectsStore for MySqlPool {
                     // which produces a `DatabaseError` variant. Handle both.
                     let is_deadlock = match &e {
                         crate::DbError::SqlError(msg) | crate::DbError::DatabaseError(msg) => {
-                            msg.contains("Deadlock found when trying to get lock")
+                            is_mysql_deadlock(msg)
                         }
                         _ => false,
                     };
                     if is_deadlock && attempt < max_retries {
+                        // Exponential-ish backoff: 50, 100, 200, 400, 800, 1600ms
+                        let delay_ms = mysql_deadlock_backoff_ms(attempt);
                         attempt += 1;
-                        // Exponential-ish backoff: 20ms, 60ms, 180ms
-                        let delay_ms = 20_u64 * 3_u64.pow(attempt - 1);
                         #[allow(clippy::disallowed_methods)]
                         tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
                         continue;

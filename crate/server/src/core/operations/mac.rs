@@ -1,5 +1,3 @@
-// SessionParams removed; MAC operations are now paramless
-
 use cosmian_kms_server_database::reexport::cosmian_kmip::{
     kmip_0::kmip_types::HashingAlgorithm,
     kmip_2_1::{
@@ -79,6 +77,7 @@ pub(crate) async fn mac(kms: &KMS, request: MAC, user: &str) -> KResult<MACRespo
                 CryptographicAlgorithm::HMACSHA3256 => HashingAlgorithm::SHA3256,
                 CryptographicAlgorithm::HMACSHA3384 => HashingAlgorithm::SHA3384,
                 CryptographicAlgorithm::HMACSHA3512 => HashingAlgorithm::SHA3512,
+                // Non-HMAC algorithms (e.g., AES) cannot directly infer hashing algorithm; try attributes
                 _ => {
                     let attrs = owm.attributes();
                     if let Some(cp) = &attrs.cryptographic_parameters {

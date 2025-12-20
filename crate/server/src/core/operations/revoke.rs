@@ -335,6 +335,7 @@ async fn revoke_key_core(
     kms.database
         .update_object(owm.id(), owm.object(), owm.attributes(), None)
         .await?;
+
     kms.database.update_state(owm.id(), state).await?;
 
     debug!("Object with unique identifier: {} revoked", owm.id());

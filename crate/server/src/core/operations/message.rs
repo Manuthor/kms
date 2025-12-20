@@ -324,6 +324,7 @@ fn get_operation_name(operation: &Operation) -> &'static str {
 async fn process_operation(
     kms: &KMS,
     user: &str,
+
     request_operation: Operation,
 ) -> Result<Operation, KmsError> {
     // Get operation name for metrics
@@ -350,12 +351,16 @@ async fn process_operation(
             ));
         }
         Operation::RNGRetrieve(kmip_request) => {
-            let resp = kms.rng_retrieve(kmip_request, user).await?;
+            let resp = kms
+                .rng_retrieve(kmip_request, user, )
+                .await?;
             Operation::RNGRetrieveResponse(resp)
         }
         Operation::RNGSeed(kmip_request) => {
             // Delegate to KMS method for consistent policy enforcement
-            let resp = kms.rng_seed(kmip_request, user).await?;
+            let resp = kms
+                .rng_seed(kmip_request, user)
+                .await?;
             Operation::RNGSeedResponse(resp)
         }
         Operation::PKCS11(pkcs_req) => {

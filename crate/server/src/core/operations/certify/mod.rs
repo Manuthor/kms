@@ -273,6 +273,7 @@ async fn get_subject(
     kms: &KMS,
     request: &Certify,
     user: &str,
+
     privileged_users: Option<Vec<String>>,
 ) -> KResult<Subject> {
     // Did the user provide a CSR?

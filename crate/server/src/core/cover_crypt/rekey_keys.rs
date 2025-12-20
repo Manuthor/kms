@@ -34,6 +34,7 @@ use crate::{core::cover_crypt::locate_usk, error::KmsError, kms_bail, result::KR
 /// - `DisableAttribute`: Disable attributes in the access structure.
 /// - `AddAttribute`: Add new attributes to the access structure.
 /// - `RenameAttribute`: Rename attributes in the access structure.
+#[expect(clippy::large_futures)]
 pub(crate) async fn rekey_keypair_cover_crypt(
     kmip_server: &KMS,
     cover_crypt: Covercrypt,
@@ -46,7 +47,7 @@ pub(crate) async fn rekey_keypair_cover_crypt(
     trace!("Internal rekey key pair Covercrypt");
     let mpk_uid = match action {
         RekeyEditAction::RekeyAccessPolicy(access_policy) => {
-            Box::pin(update_master_keys(
+            update_master_keys(
                 kmip_server,
                 owner,
                 &msk_uid,
@@ -65,11 +66,11 @@ pub(crate) async fn rekey_keypair_cover_crypt(
                     Ok(())
                 },
                 &privileged_users,
-            ))
+            )
             .await?
         }
         RekeyEditAction::PruneAccessPolicy(access_policy) => {
-            Box::pin(update_master_keys(
+            update_master_keys(
                 kmip_server,
                 owner,
                 &msk_uid,
@@ -88,11 +89,11 @@ pub(crate) async fn rekey_keypair_cover_crypt(
                     Ok(())
                 },
                 &privileged_users,
-            ))
+            )
             .await?
         }
         RekeyEditAction::DeleteAttribute(attrs) => {
-            Box::pin(update_master_keys(
+            update_master_keys(
                 kmip_server,
                 owner,
                 &msk_uid,
@@ -113,11 +114,11 @@ pub(crate) async fn rekey_keypair_cover_crypt(
                     Ok(())
                 },
                 &privileged_users,
-            ))
+            )
             .await?
         }
         RekeyEditAction::DisableAttribute(attrs) => {
-            Box::pin(update_master_keys(
+            update_master_keys(
                 kmip_server,
                 owner,
                 &msk_uid,
@@ -129,11 +130,11 @@ pub(crate) async fn rekey_keypair_cover_crypt(
                     Ok(())
                 },
                 &privileged_users,
-            ))
+            )
             .await?
         }
         RekeyEditAction::RenameAttribute(pairs_attr_name) => {
-            Box::pin(update_master_keys(
+            update_master_keys(
                 kmip_server,
                 owner,
                 &msk_uid,
@@ -148,11 +149,11 @@ pub(crate) async fn rekey_keypair_cover_crypt(
                     Ok(())
                 },
                 &privileged_users,
-            ))
+            )
             .await?
         }
         RekeyEditAction::AddAttribute(attrs_properties) => {
-            Box::pin(update_master_keys(
+            update_master_keys(
                 kmip_server,
                 owner,
                 &msk_uid,
@@ -167,7 +168,7 @@ pub(crate) async fn rekey_keypair_cover_crypt(
                     Ok(())
                 },
                 &privileged_users,
-            ))
+            )
             .await?
         }
     };

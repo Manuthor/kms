@@ -1,5 +1,3 @@
-// SessionParams removed; unwrap helpers are now paramless
-
 use cosmian_kms_server_database::reexport::{
     cosmian_kmip::{
         kmip_0::kmip_types::{CryptographicUsageMask, State},

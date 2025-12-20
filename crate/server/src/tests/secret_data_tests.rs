@@ -231,8 +231,6 @@ async fn test_secret_data_import_export_with_kek() -> KResult<()> {
     drop(kms);
     let mut clap_config_kek = https_clap_config();
     clap_config_kek.db.sqlite_path = sqlite_path.clone();
-    // Preserve existing database so the wrapping key remains accessible
-    clap_config_kek.db.clear_database = false;
     clap_config_kek.key_encryption_key = Some(wrapping_key_id.to_string());
     let kms = Arc::new(KMS::instantiate(Arc::new(ServerParams::try_from(clap_config_kek)?)).await?);
 
@@ -322,8 +320,6 @@ async fn test_secret_data_import_export_with_kek() -> KResult<()> {
     drop(kms);
     let mut clap_config_unwrap = https_clap_config();
     clap_config_unwrap.db.sqlite_path = sqlite_path;
-    // Preserve existing database for default unwrap behavior
-    clap_config_unwrap.db.clear_database = false;
     clap_config_unwrap.key_encryption_key = Some(wrapping_key_id.to_string());
     clap_config_unwrap.default_unwrap_type = Some(["SecretData".to_owned()].to_vec());
     let kms =

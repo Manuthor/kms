@@ -158,6 +158,7 @@ fi
 if [ "$COMMAND" = "test" ]; then
   export WITH_WGET=1
 fi
+
 # Determine repository root
 REPO_ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 cd "$REPO_ROOT"
@@ -311,8 +312,6 @@ test)
   hsm)
     # Optional backend argument: softhsm2 | utimaco | proteccio | all (default)
     HSM_BACKEND="${1:-all}"
-    # Normalize potential leading dot (zsh/typo), e.g. '.utimaco' -> 'utimaco'
-    HSM_BACKEND="${HSM_BACKEND#.}"
     case "$HSM_BACKEND" in
     all)
       SCRIPT="$REPO_ROOT/.github/scripts/test_hsm.sh"
@@ -345,15 +344,12 @@ test)
   # Signal to shell.nix to include extra tools for tests (wget, softhsm2, psmisc)
   if [ "$TEST_TYPE" = "hsm" ] || [ "$TEST_TYPE" = "all" ]; then
     export WITH_HSM=1
-    # Always run HSM tests in pure mode; do not preserve host toolchain env
-    unset CC CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER AR CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_AR || true
   fi
   # For PyKMIP tests, ensure Python tooling is present inside the Nix shell
   if [ "$TEST_TYPE" = "pykmip" ]; then
     export WITH_PYTHON=1
   fi
-  # Build the list of variables to preserve into nix-shell
-  KEEP_VARS_BASE=" \
+  KEEP_VARS=" \
         --keep REDIS_HOST --keep REDIS_PORT \
         --keep MYSQL_HOST --keep MYSQL_PORT \
         --keep POSTGRES_HOST --keep POSTGRES_PORT \
@@ -363,13 +359,10 @@ test)
         --keep GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY \
         --keep WITH_WGET \
         --keep WITH_HSM \
-        --keep WITH_PYTHON"
-
-  # Optionally add toolchain-related keeps if using host toolchain
-  KEEP_VARS="$KEEP_VARS_BASE"
+          --keep WITH_PYTHON"
   ;;
 package)
-  # Package subcommand handled below; no HSM-specific env setup here
+  # Prefer Nix derivations (nix/package.nix) over shell scripts
   case "$VARIANT" in
   fips | non-fips) : ;;
   *)
@@ -811,15 +804,11 @@ if [ "$COMMAND" = "package" ] && [ "$PACKAGE_TYPE" = "dmg" ] && [ "$(uname)" = "
   echo "Note: Running without --pure mode on macOS for DMG packaging (requires system utilities)"
 fi
 
-# For HSM tests, default to impure for Utimaco to avoid cargo segfaults; others stay pure.
+# HSM tests now run in a pure Nix environment; Utimaco PKCS#11 and OpenSSL
+# are supplied via shell.nix buildInputs/setupHook. Avoid host mixing entirely.
 if [ "$COMMAND" = "test" ] && { [ "$TEST_TYPE" = "hsm" ] || [ "$TEST_TYPE" = "all" ]; }; then
-  if [ "${HSM_BACKEND:-all}" = "utimaco" ] && [ -z "${FORCE_PURE_HSM:-}" ]; then
-    USE_PURE=false
-    echo "Note: Running Utimaco HSM tests in non-pure nix-shell (impure)"
-  else
-    USE_PURE=true
-    echo "Note: Running HSM tests in --pure mode (backend=${HSM_BACKEND:-all})"
-  fi
+  USE_PURE=true
+  echo "Running HSM tests in --pure Nix shell (no host libs)"
 fi
 
 {

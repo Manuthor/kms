@@ -1,5 +1,3 @@
-// SessionParams removed; sign is now paramless
-
 use cosmian_kms_server_database::reexport::{
     cosmian_kmip::{
         kmip_0::kmip_types::{CryptographicUsageMask, ErrorReason, State},

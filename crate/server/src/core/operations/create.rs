@@ -1,5 +1,3 @@
-// SessionParams removed; Create is now paramless
-
 use cosmian_kms_server_database::reexport::{
     cosmian_kmip,
     cosmian_kmip::{

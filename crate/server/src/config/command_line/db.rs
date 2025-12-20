@@ -218,7 +218,7 @@ impl MainDBConfig {
                 }
                 #[cfg(feature = "non-fips")]
                 #[allow(deprecated)]
-                // Redis-Findex backend
+                // Label will still be accepted until all data is migrated
                 "redis-findex" => {
                     let url = ensure_url(self.database_url.as_deref(), "KMS_REDIS_URL")
                         .context("db:init")?;
@@ -231,7 +231,6 @@ impl MainDBConfig {
                     // Generate the symmetric key from the master password
                     let master_key = redis_master_key_from_password(&redis_master_password)
                         .context("db:init")?;
-                    // Legacy label support for migration has been removed
                     MainDbParams::RedisFindex(url, master_key)
                 }
                 unknown => kms_bail!("Unknown database type: {unknown}"),

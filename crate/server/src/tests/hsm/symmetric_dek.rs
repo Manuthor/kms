@@ -58,8 +58,6 @@ pub(super) async fn test_wrapped_symmetric_dek() -> KResult<()> {
     // re-instantiate the kms
     let mut clap_config = hsm_clap_config(&owner, Some(kek_uuid))?;
     clap_config.db.sqlite_path = sqlite_path.clone();
-    // Preserve previously created keys across restarts
-    clap_config.db.clear_database = false;
 
     let kms = Arc::new(KMS::instantiate(Arc::new(ServerParams::try_from(clap_config)?)).await?);
 
@@ -79,8 +77,6 @@ pub(super) async fn test_wrapped_symmetric_dek() -> KResult<()> {
     let mut clap_config = hsm_clap_config(&owner, Some(kek_uuid))?;
     clap_config.db.sqlite_path = sqlite_path.clone();
     clap_config.default_unwrap_type = Some(["SymmetricKey".to_owned()].to_vec());
-    // Preserve previously created keys across restarts
-    clap_config.db.clear_database = false;
     let Some(kek_uid) = clap_config.key_encryption_key.clone() else {
         return Err(KmsError::Default("Missing KEK".to_owned()));
     };

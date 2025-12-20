@@ -29,6 +29,7 @@ pub(crate) async fn register(
     kms: &KMS,
     mut request: Register,
     owner: &str,
+
     privileged_users: Option<Vec<String>>,
 ) -> KResult<RegisterResponse> {
     trace!("{request}");

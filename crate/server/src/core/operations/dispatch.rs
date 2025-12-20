@@ -1,5 +1,3 @@
-// No per-request session parameters; simplify imports
-
 use cosmian_kms_server_database::reexport::cosmian_kmip::{
     kmip_0::kmip_operations::DiscoverVersions,
     kmip_2_1::kmip_operations::{

@@ -1,5 +1,3 @@
-// SessionParams removed from wrapping helpers
-
 use cosmian_kms_server_database::{
     CachedUnwrappedObject,
     reexport::{
