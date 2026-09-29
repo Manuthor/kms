@@ -131,7 +131,8 @@ flowchart TB
 > **Upstream-only jobs**: test types that need upstream-only secrets or infrastructure run in
 > dedicated jobs gated by `if: github.repository == 'Cosmian/kms'`, so they are skipped on
 > forks: `test-nix-upstream` (`google-cse`, `secret_vault`, `secret_aws`, `secret_azure`),
-> `hsm-aws-cloudhsm` and `xks-remote` (AWS XKS — remote server). They are separate jobs
+> `hsm-upstream` (`proteccio`, `crypt2pay`, `aws-cloudhsm` hardware HSMs) and `xks-remote`
+> (AWS XKS — remote server). They are separate jobs
 > because a job-level `if` cannot read the `matrix` context.
 
 ---
